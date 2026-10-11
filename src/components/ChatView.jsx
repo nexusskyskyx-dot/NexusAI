@@ -3,7 +3,7 @@ import { useStore, actions } from '../store.js';
 import Message from './Message.jsx';
 import Composer from './Composer.jsx';
 import AgentsPanel from './AgentsPanel.jsx';
-import { Logo, IconAgents, IconDownload, IconPlus, IconSparkle, IconCode, IconBrain, IconBolt, IconImage } from './Icons.jsx';
+import { Logo, IconAgents, IconDownload, IconPlus, IconSparkle, IconCode, IconBrain, IconBolt, IconImage, IconRocket } from './Icons.jsx';
 
 const SUGGESTIONS = [
   {
@@ -37,6 +37,13 @@ const SUGGESTIONS = [
     mode: 'image',
     prompt: 'A futuristic OLED-black megacity at night, neon emerald light trails, cinematic wide shot, ultra detailed, moody atmosphere',
   },
+  {
+    icon: <IconRocket size={16} />,
+    title: 'Build a full project',
+    sub: 'the whole agent team codes it',
+    view: 'projects',
+    prompt: '',
+  },
 ];
 
 function Hero() {
@@ -69,6 +76,10 @@ function Hero() {
           key={i}
           className="suggestion"
           onClick={() => {
+            if (sg.view) {
+              actions.setView(sg.view);
+              return;
+            }
             if (sg.mode) actions.setSettings({ mode: sg.mode });
             actions.sendMessage(sg.prompt);
           }}

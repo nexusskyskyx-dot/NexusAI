@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore, actions } from '../store.js';
-import { Logo, IconChat, IconAgents, IconCode, IconKeys, IconPlus, IconTrash, IconBolt, IconX } from './Icons.jsx';
+import { Logo, IconChat, IconAgents, IconCode, IconKeys, IconPlus, IconTrash, IconBolt, IconX, IconFolder } from './Icons.jsx';
 
 const ACCENTS = [
   { id: 'green', c: '#00d492' },
@@ -68,6 +68,7 @@ export default function Sidebar() {
         <nav className="nav">
           <NavItem icon={<IconChat />} label="Chat" view="chat" />
           <NavItem icon={<IconAgents />} label="Agents" view="agents" />
+          <NavItem icon={<IconFolder />} label="Projects" view="projects" badge={s.projects.length || null} />
           <NavItem icon={<IconCode />} label="Canvas" view="canvas" />
           <NavItem icon={<IconKeys />} label="Keys & Models" view="keys" badge={keyCount ? keyCount : 'FREE'} />
         </nav>

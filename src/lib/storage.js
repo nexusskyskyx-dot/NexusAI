@@ -10,6 +10,8 @@ const K = {
   squad: 'nexus.squad.v1',
   solo: 'nexus.solo.v1',
   image: 'nexus.image.v1',
+  prj: 'nexus.prj.v1',
+  projects: 'nexus.projects.v1',
   runs: 'nexus.runs.v1',
 };
 
@@ -83,6 +85,10 @@ export const storage = {
   saveSquad: (v) => save(K.squad, v),
   loadSolo: () => load(K.solo, { provider: 'pollinations', model: 'openai' }),
   saveSolo: (v) => save(K.solo, v),
+  loadPrj: () => load(K.prj, { provider: 'pollinations', model: 'openai' }),
+  savePrj: (v) => save(K.prj, v),
+  loadProjects: () => load(K.projects, []),
+  saveProjects: (v) => save(K.projects, Array.isArray(v) ? v.slice(0, 6) : []),
   loadImage: () => load(K.image, { provider: 'pollinations', model: 'flux', aspect: '1:1', count: 1 }),
   saveImage: (v) => save(K.image, v),
   loadRuns: () => load(K.runs, []),

@@ -4,7 +4,7 @@
 // sandboxed iframe, with console + error capture piped back to the parent.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CONSOLE_SHIM = `<script>
+export const CONSOLE_SHIM = `<script>
 (function () {
   function fmt(a) {
     try {

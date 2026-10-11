@@ -5,6 +5,7 @@ import ChatView from '@components/ChatView.jsx';
 import AgentsView from '@components/AgentsView.jsx';
 import CanvasView from '@components/CanvasView.jsx';
 import KeysView from '@components/KeysView.jsx';
+import ProjectsView from '@components/ProjectsView.jsx';
 import PreviewModal from '@components/PreviewModal.jsx';
 import ImageStudio from '@components/ImageStudio.jsx';
 import MobileBar from '@components/MobileBar.jsx';
@@ -46,6 +47,7 @@ export default function App() {
         {s.view === 'chat' && <ChatView />}
         {s.view === 'agents' && <AgentsView />}
         {s.view === 'canvas' && <CanvasView />}
+        {s.view === 'projects' && <ProjectsView />}
         {s.view === 'keys' && <KeysView />}
       </main>
       <PreviewModal />

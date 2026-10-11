@@ -6,6 +6,7 @@ import { storage, uid } from '@lib/storage.js';
 import { streamChat, friendlyError } from '@lib/ai.js';
 import { generateImage, IMAGE_ASPECTS } from '@lib/images.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
+import { runProject } from '@lib/projects.js';
 import { modelLabel, getProvider, getModel, PROVIDERS } from '@shared/providers.js';
 
 // ── state ────────────────────────────────────────────────────────────────────
@@ -17,6 +18,10 @@ let state = {
   settings: storage.loadSettings(),
   solo: storage.loadSolo(),
   image: storage.loadImage(),
+  prj: storage.loadPrj(),
+  projects: storage.loadProjects(),
+  activeProjectId: null,
+  projectBusy: false,
   squad: storage.loadSquad(),
   conversations: storage.loadConvs(),
   activeId: null,
@@ -57,6 +62,8 @@ function schedulePersist() {
     storage.saveSettings(state.settings);
     storage.saveSolo(state.solo);
     storage.saveImage(state.image);
+    storage.savePrj(state.prj);
+    storage.saveProjects(state.projects);
     storage.saveSquad(state.squad);
     storage.saveConvs(state.conversations.map((c) => ({ ...c, messages: c.messages.map((m) => ({ ...m, streaming: false })) })));
     storage.saveRuns(state.runs);
@@ -467,6 +474,77 @@ function stopGeneration() {
   abortCtl?.abort();
 }
 
+// ── projects ─────────────────────────────────────────────────────────────────
+let projectCtl = null;
+let projBuf = null;
+
+function flushProjectBuf() {
+  if (!projBuf) return;
+  const { pid, fields } = projBuf;
+  clearTimeout(projBuf.timer);
+  projBuf = null;
+  setState((s) => ({ projects: s.projects.map((p) => (p.id === pid ? { ...p, ...fields } : p)) }));
+}
+function updateProject(pid, patch) {
+  setState((s) => ({ projects: s.projects.map((p) => (p.id === pid ? { ...p, ...patch } : p)) }));
+}
+
+async function startProject(idea) {
+  const text = String(idea || '').trim();
+  if (!text || state.projectBusy) return;
+  const pid = uid();
+  const proj = {
+    id: pid,
+    idea: text,
+    title: 'New project',
+    description: '',
+    files: [],
+    agents: [],
+    stages: [],
+    status: 'planning',
+    createdAt: Date.now(),
+    testReport: null,
+    report: null,
+    model: modelLabel(state.prj.provider, state.prj.model),
+  };
+  setState(
+    (s) => ({ projects: [proj, ...s.projects].slice(0, 6), activeProjectId: pid, view: 'projects', projectBusy: true }),
+    { persist: true }
+  );
+
+  projectCtl = new AbortController();
+  const emit = (fields) => {
+    if (!projBuf || projBuf.pid !== pid) {
+      flushProjectBuf();
+      projBuf = { pid, fields: {}, timer: null };
+    }
+    Object.assign(projBuf.fields, fields);
+    if (!projBuf.timer) projBuf.timer = setTimeout(flushProjectBuf, 60);
+  };
+
+  try {
+    await runProject({
+      idea: text,
+      model: state.prj,
+      pool: buildPool(),
+      keys: state.keys,
+      settings: state.settings,
+      signal: projectCtl.signal,
+      cb: { onDoc: emit },
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') updateProject(pid, { status: 'stopped' });
+    else {
+      updateProject(pid, { status: 'error', error: friendlyError(e) });
+      toast(friendlyError(e), 'error');
+    }
+  } finally {
+    flushProjectBuf();
+    setState({ projectBusy: false });
+    schedulePersist();
+  }
+}
+
 // ── boot ─────────────────────────────────────────────────────────────────────
 function boot() {
   if (state.booted) return;
@@ -496,6 +574,19 @@ export const actions = {
     }, { persist: true }),
   setSolo: (patch) => setState((s) => ({ solo: { ...s.solo, ...patch } }), { persist: true }),
   setImage: (patch) => setState((s) => ({ image: { ...s.image, ...patch } }), { persist: true }),
+  setPrjModel: (v) => setState((s) => ({ prj: { ...s.prj, ...v } }), { persist: true }),
+  openProjectWizard: () => setState({ view: 'projects', activeProjectId: null }),
+  selectProject: (id) => setState({ view: 'projects', activeProjectId: id }),
+  deleteProject: (id) =>
+    setState(
+      (s) => ({
+        projects: s.projects.filter((p) => p.id !== id),
+        activeProjectId: s.activeProjectId === id ? null : s.activeProjectId,
+      }),
+      { persist: true }
+    ),
+  startProject,
+  stopProject: () => projectCtl?.abort(),
   openStudio: (img, msgId = null) => setState({ studio: { img, msgId } }),
   closeStudio: () => setState({ studio: null }),
   setSquad: (patch) => setState((s) => ({ squad: { ...s.squad, ...patch } }), { persist: true }),
