@@ -157,6 +157,9 @@ function demoTitle(idea) {
 
 function pickFlavor(body) {
   const sys = (body.messages || []).find((m) => m.role === 'system')?.content || '';
+  if (/UPGRADE PLANNER/i.test(sys)) return 'uplanner';
+  if (/UPGRADE BUILDER/i.test(sys)) return 'ubuilder';
+  if (/UPGRADE REPORT/i.test(sys)) return 'ureport';
   if (/COORDINATOR/i.test(sys)) return 'coordinator';
   if (/FILE BUILDER/i.test(sys)) return 'builder';
   if (/TESTER/i.test(sys)) return 'tester';
@@ -171,11 +174,41 @@ function pickFlavor(body) {
 }
 
 export function demoResponse(body) {
-  const q = lastUser(body.messages).slice(0, 400);
+  const raw = lastUser(body.messages);
+  const q = raw.slice(0, 400);
   const topic = q.replace(/\s+/g, ' ').trim() || 'your request';
   const flavor = pickFlavor(body);
 
   // ── project pipeline roles ────────────────────────────────────────────────
+  if (flavor === 'uplanner') {
+    const reqq = (String(q).split(/UPGRADE REQUEST:/i)[1] || '').split('\n')[0].trim();
+    const paths = [...String(q).matchAll(/^- (\S+)$/gm)].map((m) => m[1]);
+    const html = paths.find((p) => /\.html?$/i.test(p));
+    const css = paths.find((p) => /\.css$/i.test(p));
+    const js = paths.find((p) => /\.m?js$/i.test(p));
+    const changes = [];
+    if (html) changes.push({ action: 'modify', path: html, instruction: reqq });
+    if (css && /style|design|color|theme|dark|look|polish/i.test(reqq)) changes.push({ action: 'modify', path: css, instruction: reqq });
+    if (js && /sound|feature|interact|animat|button|score|game|effect|mobile|touch/i.test(reqq)) changes.push({ action: 'modify', path: js, instruction: reqq });
+    if (!changes.length && js) changes.push({ action: 'modify', path: js, instruction: reqq });
+    return JSON.stringify({ summary: `Applying your upgrade: ${reqq.slice(0, 80)}`, changes });
+  }
+
+  if (flavor === 'ubuilder') {
+    const m = String(raw).match(/---CURRENT FILE CONTENT---\n([\s\S]*?)\n---END CURRENT FILE CONTENT---/);
+    const path = (String(q).match(/FILE: (\S+)/) || [])[1] || 'file.txt';
+    const current = m ? m[1] : '';
+    if (/\.m?js$/i.test(path)) return (current || '// new module') + `\nconsole.info('[nexus] upgrade applied');`;
+    if (/\.css$/i.test(path)) return (current || '/* styles */') + `\n/* nexus upgrade applied */`;
+    return (current || '<!-- new file -->') + `\n<!-- nexus upgrade applied -->`;
+  }
+
+  if (flavor === 'ureport') {
+    const reqq = (String(q).split(/UPGRADE REQUEST:/i)[1] || '').split('\n')[0].trim();
+    const files = (String(q).split(/Files updated:\s*/i)[1] || '').split('\n')[0].trim();
+    return `## What changed\n- Applied: “${reqq.slice(0, 100)}”\n- Updated: ${files || 'project files'}\n- Re-tested the project — all checks pass.\n\n*Upgrade note by the NexusAI demo team.*`;
+  }
+
   if (flavor === 'coordinator') {
     const idea = (String(q).split(/PROJECT IDEA:/i)[1] || q).replace(/\s+/g, ' ').trim();
     const title = demoTitle(idea);
@@ -203,20 +236,26 @@ export function demoResponse(body) {
   }
 
   if (flavor === 'tester') {
+    // surgical: only report the noisy-log bug in files that actually contain it
+    const blocks = [...String(raw).matchAll(/### (\S+)\n```\n([\s\S]*?)\n```/g)];
+    const buggy = blocks.find((b) => /console\.log\('clicked'/.test(b[2]));
+    if (!buggy) return JSON.stringify({ verdict: 'pass', bugs: [] });
     return JSON.stringify({
       verdict: 'issues',
-      bugs: [
-        {
-          file: 'js/app.js',
-          issue: 'console.log fires on every click — noisy in production',
-          fix: 'remove the per-click log, keep the startup log',
-        },
-      ],
+      bugs: [{ file: buggy[1], issue: 'console.log fires on every click — noisy in production', fix: 'remove the per-click log, keep the startup log' }],
     });
   }
 
   if (flavor === 'debugger') {
-    return JSON.stringify({ files: [{ path: 'js/app.js', content: P_JS_FIXED }] });
+    // surgical: strip only the noisy log lines from the current file contents
+    const blocks = [...String(raw).matchAll(/### (\S+)\n```\n([\s\S]*?)\n```/g)];
+    const files = [];
+    for (const b of blocks) {
+      if (/console\.log\('clicked'/.test(b[2])) {
+        files.push({ path: b[1], content: b[2].split('\n').filter((l) => !/console\.log\('clicked'/.test(l)).join('\n') });
+      }
+    }
+    return JSON.stringify({ files });
   }
 
   if (flavor === 'documenter') {

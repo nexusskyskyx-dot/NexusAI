@@ -6,7 +6,7 @@ import { storage, uid } from '@lib/storage.js';
 import { streamChat, friendlyError } from '@lib/ai.js';
 import { generateImage, IMAGE_ASPECTS } from '@lib/images.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
-import { runProject } from '@lib/projects.js';
+import { runProject, upgradeProject as runUpgrade } from '@lib/projects.js';
 import { modelLabel, getProvider, getModel, PROVIDERS } from '@shared/providers.js';
 
 // ── state ────────────────────────────────────────────────────────────────────
@@ -545,6 +545,48 @@ async function startProject(idea) {
   }
 }
 
+async function startUpgrade(request) {
+  const text = String(request || '').trim();
+  const proj = state.projects.find((p) => p.id === state.activeProjectId);
+  if (!text || !proj || state.projectBusy) return;
+  setState({ projectBusy: true });
+
+  projectCtl = new AbortController();
+  const pid = proj.id;
+  const emit = (fields) => {
+    if (!projBuf || projBuf.pid !== pid) {
+      flushProjectBuf();
+      projBuf = { pid, fields: {}, timer: null };
+    }
+    Object.assign(projBuf.fields, fields);
+    if (!projBuf.timer) projBuf.timer = setTimeout(flushProjectBuf, 60);
+  };
+
+  try {
+    await runUpgrade({
+      project: proj,
+      request: text,
+      model: state.prj,
+      pool: buildPool(),
+      keys: state.keys,
+      settings: state.settings,
+      signal: projectCtl.signal,
+      cb: { onDoc: emit },
+    });
+    toast(`Project upgraded to v${(state.projects.find((p) => p.id === pid)?.version) || 2} ✓`);
+  } catch (e) {
+    if (e?.name === 'AbortError') updateProject(pid, { status: 'stopped', upgradeNote: null });
+    else {
+      updateProject(pid, { status: 'error', error: friendlyError(e), upgradeNote: null });
+      toast(friendlyError(e), 'error');
+    }
+  } finally {
+    flushProjectBuf();
+    setState({ projectBusy: false });
+    schedulePersist();
+  }
+}
+
 // ── boot ─────────────────────────────────────────────────────────────────────
 function boot() {
   if (state.booted) return;
@@ -586,6 +628,7 @@ export const actions = {
       { persist: true }
     ),
   startProject,
+  upgradeProject: startUpgrade,
   stopProject: () => projectCtl?.abort(),
   openStudio: (img, msgId = null) => setState({ studio: { img, msgId } }),
   closeStudio: () => setState({ studio: null }),

@@ -13,12 +13,17 @@ CHAT TEAM                                   PROJECT MODE
 └──────────────┘    └─────────┘             🧪 TESTER → 🔧 DEBUGGER → 📝 README
      ⇄ any failed agent auto-switches            ↓
        to the next available model            📊 FINAL REPORT + ZIP export
+                                              ↓
+                              ♻️ type any upgrade → files re-touched,
+                                re-tested, version bumped, changelog kept
 ```
 
 ## ✨ Features
 
 - **Multi-agent team mode** — a Planner writes a brief, up to 4 drafters (different models) compete in parallel, a Reviewer picks the winner, and a Synthesizer ships the final answer. Watch it all live in the **Agent Pipeline** panel.
 - **Project mode** ⭐ — a **Friend** agent greets you with ideas (or take your own). The **Coordinator** plans the file & folder structure, then **Designer / Coder / Tester / Debugger / Documenter / Optimizer** build a complete web project: files stream into a **file explorer** (folders, sizes, line counts), a **live preview** updates as they finish, the Tester finds bugs and the Debugger patches them, and you get a **final report** + one-click **ZIP export**. Works fully offline via the demo team.
+- **Upgrade loop** ♻️ — a finished project isn't the end. Type any request in the project room's footer ("add sound effects", "make it mobile friendly", "polish the design") or tap a quick chip: the team **re-plans which files to touch**, rewrites them, re-tests and re-debugging patches, bumps the version and logs every change to an **upgrade changelog**. Every upgrade is incremental — existing content is preserved and only the requested parts change.
+- **Clean project room** — the v1.4 interface de-clutters the workspace: a quiet header with version pill, a thin dot-progress line, a tabbed right panel (**Preview / Report / Agents**) that swaps instead of stacking, and the upgrade footer tucked at the bottom.
 - **Automatic agent failover** — if any agent's model fails (bad key, rate limit, outage), the engine instantly switches that agent to the next available model from your fallback pool. The agent card shows the switch; the answer still ships.
 - **Solo mode** — pick one model and chat directly, streamed.
 - **Image generation** — a dedicated **Image** mode: Flux / Turbo via Pollinations (free, no key) or DALL·E 3 / GPT-Image 1 via your OpenAI key. Choose aspect ratio and 1/2/4 variations per prompt.
@@ -87,7 +92,7 @@ server/index.js       Express: static hosting + /api proxy + health
 server/demo.js        Offline demo model (test everything with zero setup)
 src/lib/ai.js         Transport layer: direct-browser ⇄ proxy, SSE parsing
 src/lib/engine.js     Multi-agent orchestrator with automatic failover
-src/lib/projects.js   Project pipeline: Coordinator → Designer/Coder → Tester → Debugger → Docs → Report
+src/lib/projects.js   Project pipeline: Coordinator → Designer/Coder → Tester → Debugger → Docs → Report + upgrade loop (re-plan → re-build → re-test → changelog)
 src/lib/zip.js        Zero-dependency ZIP writer (project export)
 src/lib/images.js     Image generation (Pollinations + OpenAI images)
 src/lib/preview.js    Sandboxed live-preview builder + console capture
@@ -100,3 +105,4 @@ src/components/       Chat, Agents pipeline, Projects room, Canvas, Keys, Image 
 - Open **Agents → Recommended squad** to auto-pick the best models you have keys for.
 - Code blocks in chat have **Copy / Save / Preview** toolbars; generated images open the **studio**.
 - The failover pool is every model you can currently run — add more free keys to make the team unkillable.
+- After a project finishes, keep typing in the project room — every request is a **versioned upgrade**, and "what changed" lands in the Report tab.

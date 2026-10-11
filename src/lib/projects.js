@@ -140,14 +140,73 @@ export function assemblePreview(files) {
   return html;
 }
 
+// ── resilient ask with failover (shared by build & upgrade pipelines) ────────
+function makeAsk({ model, pool, keys, settings, signal, onAgent }) {
+  const key = (p) => (keys || {})[p] || '';
+  const transport = settings?.transport || 'auto';
+  const defMax = settings?.maxTokens || 4000;
+  return async function ask({ id, role, system, user, temperature, maxTokens: mt, onDelta }) {
+    const meta = ROLE_META[role] || { glyph: '◆', name: role };
+    const slot = { provider: model.provider, model: model.model };
+    const attempts = [slot];
+    const seen = new Set([slot.provider + '/' + slot.model]);
+    for (const cand of pool || []) {
+      if (attempts.length >= 3) break;
+      if (!cand?.model) continue;
+      const k = cand.provider + '/' + cand.model;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      attempts.push({ provider: cand.provider, model: cand.model });
+    }
+
+    const t0 = performance.now();
+    let lastErr = null;
+    for (let i = 0; i < attempts.length; i++) {
+      const at = attempts[i];
+      const base = {
+        id,
+        role,
+        name: meta.name,
+        provider: at.provider,
+        model: at.model,
+        status: 'running',
+        text: '',
+        ms: 0,
+        note: i > 0 ? `switched to ${modelLabel(at.provider, at.model)} after failure` : null,
+      };
+      onAgent({ ...base });
+      let acc = '';
+      try {
+        const r = await streamChat({
+          provider: at.provider,
+          model: at.model,
+          system,
+          messages: [{ role: 'user', content: user }],
+          temperature,
+          maxTokens: mt || defMax,
+          apiKey: key(at.provider),
+          signal,
+          transport,
+          onDelta: onDelta ? (d) => { acc += d; onDelta(d, acc); } : undefined,
+        });
+        onAgent({ ...base, status: 'done', text: r.text.slice(0, 400), ms: Math.round(performance.now() - t0) });
+        return r.text;
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        lastErr = e;
+      }
+    }
+    onAgent({ id, role, name: meta.name, provider: model.provider, model: model.model, status: 'error', error: friendlyError(lastErr), text: '', ms: Math.round(performance.now() - t0) });
+    throw lastErr;
+  };
+}
+
 // ── the runner ───────────────────────────────────────────────────────────────
 // runProject({ idea, model:{provider,model}, pool, keys, settings, signal, cb })
 // cb.onDoc(fields) receives shallow doc patches (throttle-friendly).
 // Returns the final doc snapshot.
 export async function runProject({ idea, model, pool, keys, settings, signal, cb }) {
-  const key = (p) => (keys || {})[p] || '';
   const temp = typeof settings?.temperature === 'number' ? settings.temperature : 0.7;
-  const transport = settings?.transport || 'auto';
   const maxTokens = settings?.maxTokens || 4000;
 
   const doc = {
@@ -178,60 +237,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
   const emitFiles = () => emit({ files: [...filesMap.values()] });
 
   // resilient ask with failover across the pool
-  async function ask({ id, role, system, user, temperature, maxTokens: mt, onDelta }) {
-    const meta = ROLE_META[role] || { glyph: '◆', name: role };
-    const slot = { provider: model.provider, model: model.model };
-    const attempts = [slot];
-    const seen = new Set([slot.provider + '/' + slot.model]);
-    for (const cand of pool || []) {
-      if (attempts.length >= 3) break;
-      if (!cand?.model) continue;
-      const k = cand.provider + '/' + cand.model;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      attempts.push({ provider: cand.provider, model: cand.model });
-    }
-
-    const t0 = performance.now();
-    let lastErr = null;
-    for (let i = 0; i < attempts.length; i++) {
-      const at = attempts[i];
-      const base = {
-        id,
-        role,
-        name: meta.name,
-        provider: at.provider,
-        model: at.model,
-        status: 'running',
-        text: '',
-        ms: 0,
-        note: i > 0 ? `switched to ${modelLabel(at.provider, at.model)} after failure` : null,
-      };
-      emitAgent({ ...base });
-      let acc = '';
-      try {
-        const r = await streamChat({
-          provider: at.provider,
-          model: at.model,
-          system,
-          messages: [{ role: 'user', content: user }],
-          temperature,
-          maxTokens: mt || maxTokens,
-          apiKey: key(at.provider),
-          signal,
-          transport,
-          onDelta: onDelta ? (d) => { acc += d; onDelta(d, acc); } : undefined,
-        });
-        emitAgent({ ...base, status: 'done', text: r.text.slice(0, 400), ms: Math.round(performance.now() - t0) });
-        return r.text;
-      } catch (e) {
-        if (e.name === 'AbortError') throw e;
-        lastErr = e;
-      }
-    }
-    emitAgent({ id, role, name: meta.name, provider: model.provider, model: model.model, status: 'error', error: friendlyError(lastErr), text: '', ms: Math.round(performance.now() - t0) });
-    throw lastErr;
-  }
+  const ask = makeAsk({ model, pool, keys, settings, signal, onAgent: emitAgent });
 
   // ── 1 · COORDINATOR ────────────────────────────────────────────────────────
   stage('plan');
@@ -411,4 +417,213 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
 
   emit({ status: 'done' });
   return doc;
+}
+
+// ── upgrade pipeline ─────────────────────────────────────────────────────────
+// Takes a finished project and a free-form user request ("add sound effects",
+// "make it mobile friendly") and iterates: plan → modify/add files →
+// re-test → debug → "what changed" note. Bumps the project version.
+const SYS_UPGRADE_PLANNER = `You are the UPGRADE PLANNER of the NexusAI project team. The user wants to change an EXISTING project. Given the request and the current file list, respond ONLY valid JSON, no fences:
+{"summary":"one sentence of what you'll do","changes":[{"action":"modify"|"add","path":"existing-or-new-file","instruction":"precise instruction for the file builder"}]}
+Rules: max 4 changes, "modify" only for paths that already exist, "add" only for new paths that fit the project structure, never delete files.`;
+
+const SYS_UPGRADE_BUILDER = (path, instruction) => `You are an UPGRADE BUILDER on the NexusAI project team. Apply this instruction to the file "${path}":
+"${instruction}"
+Preserve everything else that already works. Output ONLY the complete updated content of the file — no markdown fences, no commentary.`;
+
+const SYS_UPGRADE_REPORT = `You are the OPTIMIZER of the NexusAI project team. An upgrade was just applied to the project. Write a short "What changed" note for the user in Markdown:
+## What changed
+- bullet per meaningful change
+- one line on re-test results
+Under 120 words. No fences.`;
+
+export async function upgradeProject({ project, request, model, pool, keys, settings, signal, cb }) {
+  const ask = makeAsk({ model, pool, keys, settings, signal, onAgent: (a) => emitAgent(a) });
+  const filesMap = new Map(
+    (project.files || []).filter((f) => f.content).map((f) => [f.path, { ...f, status: 'done' }])
+  );
+  const agents = [];
+  const version = (project.version || 1) + 1;
+
+  const emit = (fields) => cb.onDoc?.(fields);
+  const emitAgent = (a) => {
+    const i = agents.findIndex((x) => x.id === a.id);
+    if (i >= 0) agents[i] = a;
+    else agents.push(a);
+    emit({ agents: [...agents] });
+  };
+  const emitFiles = () => emit({ files: [...filesMap.values()] });
+
+  emit({ status: 'upgrading', upgradeNote: '🧠 Planning the upgrade…' });
+
+  // ── 1 · plan the change set ────────────────────────────────────────────────
+  let plan = null;
+  try {
+    const fileList = [...filesMap.values()].map((f) => `- ${f.path}`).join('\n');
+    const raw = await ask({
+      id: 'up-planner',
+      role: 'coordinator',
+      system: SYS_UPGRADE_PLANNER,
+      user: `UPGRADE REQUEST: ${String(request).slice(0, 600)}\n\nPROJECT: ${project.title} — ${project.description}\nCURRENT FILES:\n${fileList}`,
+      temperature: 0.3,
+      maxTokens: 700,
+    });
+    plan = extractJSON(raw);
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+  }
+  let changes = (plan?.changes || [])
+    .filter((c) => c && typeof c.path === 'string' && (c.action === 'modify' || c.action === 'add'))
+    .slice(0, 4);
+  if (!changes.length) {
+    const fallbackPath = [...filesMap.keys()].find((p) => /\.html?$/i.test(p)) || [...filesMap.keys()][0];
+    if (fallbackPath) changes = [{ action: 'modify', path: fallbackPath, instruction: String(request).slice(0, 300) }];
+  }
+  const summary = String(plan?.summary || `Applying: ${request}`).slice(0, 200);
+  emit({ upgradeNote: `🧠 ${summary}` });
+
+  // ── 2 · apply each change ──────────────────────────────────────────────────
+  const changedPaths = [];
+  for (const ch of changes) {
+    const exists = filesMap.has(ch.path);
+    if (ch.action === 'modify' && !exists) continue;
+    if (ch.action === 'add' && exists) ch.action = 'modify';
+    const ext = ch.path.split('.').pop().toLowerCase();
+    const role = ['html', 'htm', 'css', 'svg'].includes(ext) ? 'designer' : 'coder';
+    let entry = filesMap.get(ch.path);
+    if (!entry) {
+      entry = { path: ch.path, purpose: ch.instruction?.slice(0, 80) || 'added by upgrade', content: '', status: 'writing', by: ROLE_META[role].name, bytes: 0 };
+      filesMap.set(ch.path, entry);
+    }
+    entry.status = 'writing';
+    emitFiles();
+    try {
+      const current = ch.action === 'modify' ? entry.content : '';
+      const raw = await ask({
+        id: 'up-' + ch.path,
+        role,
+        system: SYS_UPGRADE_BUILDER(ch.path, ch.instruction || String(request).slice(0, 300)),
+        user:
+          `PROJECT: ${project.title}\nUPGRADE REQUEST: ${String(request).slice(0, 400)}\n` +
+          `FILE: ${ch.path} (${ch.action})\nINSTRUCTION: ${ch.instruction || String(request).slice(0, 300)}\n\n` +
+          (current ? `---CURRENT FILE CONTENT---\n${current.slice(0, 9000)}\n---END CURRENT FILE CONTENT---\n\n` : '') +
+          `Output ONLY the complete ${ch.action === 'add' ? 'new file' : 'updated file'} content.`,
+        temperature: 0.5,
+        onDelta: (_d, acc) => {
+          entry.content = acc;
+          entry.bytes = acc.length;
+          emitFiles();
+        },
+      });
+      entry.content = stripFences(raw);
+      entry.bytes = entry.content.length;
+      entry.status = 'done';
+      entry.touched = version;
+      entry.by = ROLE_META[role].name;
+      changedPaths.push(ch.path);
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      entry.status = 'error';
+      entry.error = friendlyError(e);
+    }
+    emitFiles();
+  }
+
+  // ── 3 · re-test changed files, debug if needed ─────────────────────────────
+  if (changedPaths.length) {
+    emit({ upgradeNote: '🧪 Re-testing the changes…' });
+    let testReport = { verdict: 'pass', bugs: [] };
+    try {
+      const filesBlock = changedPaths
+        .map((p) => `### ${p}\n\`\`\`\n${String(filesMap.get(p)?.content || '').slice(0, 4000)}\n\`\`\``)
+        .join('\n\n');
+      const raw = await ask({
+        id: 'up-tester',
+        role: 'tester',
+        system: SYS.tester,
+        user: `Project: ${project.title}\nUPGRADE REQUEST: ${String(request).slice(0, 300)}\n\nChanged files:\n${filesBlock}\n\nRespond with the JSON verdict.`,
+        temperature: 0.2,
+        maxTokens: 800,
+      });
+      const parsed = extractJSON(raw);
+      if (parsed && Array.isArray(parsed.bugs)) {
+        testReport = { verdict: parsed.bugs.length ? 'issues' : 'pass', bugs: parsed.bugs.slice(0, 3).filter((b) => b && b.file) };
+      }
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+    }
+    if (testReport.bugs.length) {
+      emit({ upgradeNote: '🔧 Fixing what the tester found…' });
+      try {
+        const bugBlock = testReport.bugs.map((b, i) => `${i + 1}. ${b.file}: ${b.issue}${b.fix ? ` (suggested fix: ${b.fix})` : ''}`).join('\n');
+        const affected = testReport.bugs
+          .map((b) => filesMap.get(b.file))
+          .filter((f) => f?.content)
+          .map((f) => `### ${f.path}\n\`\`\`\n${String(f.content).slice(0, 6000)}\n\`\`\``)
+          .join('\n\n');
+        const raw = await ask({
+          id: 'up-debugger',
+          role: 'debugger',
+          system: SYS.debugger,
+          user: `Project: ${project.title}\nReported bugs:\n${bugBlock}\n\nCurrent files:\n${affected}\n\nFix and respond with the JSON patch.`,
+          temperature: 0.2,
+        });
+        const fix = extractJSON(raw);
+        let applied = 0;
+        for (const pf of fix?.files || []) {
+          const e = filesMap.get(pf.path);
+          if (e && typeof pf.content === 'string' && pf.content.length > 20) {
+            e.content = pf.content;
+            e.bytes = pf.content.length;
+            e.status = 'patched';
+            applied++;
+          }
+        }
+        testReport = { ...testReport, applied };
+      } catch (e) {
+        if (e?.name === 'AbortError') throw e;
+      }
+      emitFiles();
+    }
+    emit({ testReport });
+  }
+
+  // ── 4 · "what changed" note ────────────────────────────────────────────────
+  emit({ upgradeNote: '⚡ Writing the change note…' });
+  let note = '';
+  try {
+    const raw = await ask({
+      id: 'up-reporter',
+      role: 'reporter',
+      system: SYS_UPGRADE_REPORT,
+      user: `UPGRADE REQUEST: ${String(request).slice(0, 300)}\nSUMMARY: ${summary}\nFiles updated: ${changedPaths.join(', ') || 'none'}`,
+      temperature: 0.4,
+      maxTokens: 600,
+    });
+    note = stripFences(raw);
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+  }
+
+  const changelog = [
+    ...(project.changelog || []),
+    { version, request: String(request).slice(0, 140), summary: note || summary, ts: Date.now() },
+  ];
+
+  emit({
+    status: 'done',
+    upgradeNote: null,
+    version,
+    changelog,
+    files: [...filesMap.values()],
+  });
+
+  return {
+    ...project,
+    status: 'done',
+    version,
+    changelog,
+    files: [...filesMap.values()],
+    agents: [...agents],
+  };
 }

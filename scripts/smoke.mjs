@@ -146,4 +146,28 @@ if (zipU8[0] !== 0x50 || zipU8[1] !== 0x4b) throw new Error('zip magic bytes wro
 if (new DataView(zipBytes).getUint32(zipBytes.byteLength - 22, true) !== 0x06054b50) throw new Error('zip EOCD wrong');
 console.log(`    preview ok (${preview.length} chars) · zip ok (${zip.size} bytes)`);
 
+// 7 · upgrade pipeline — type a change request, the team iterates the project
+const { upgradeProject } = await import('../src/lib/projects.js');
+const doc7 = await upgradeProject({
+  project: doc6,
+  request: 'add sound effects and a dark theme',
+  model: { provider: 'demo', model: 'nexus-demo' },
+  pool: [{ provider: 'demo', model: 'nexus-demo' }],
+  keys: {},
+  settings: { transport: 'proxy', temperature: 0.5, maxTokens: 900 },
+  signal: new AbortController().signal,
+  cb: {},
+});
+console.log(`[7] upgrade — status=${doc7.status} version=${doc7.version} changelog=${doc7.changelog.length}`);
+console.log(`    changed: ${doc7.files.filter((f) => f.touched === 2).map((f) => f.path).join(', ')}`);
+if (doc7.status !== 'done') throw new Error('upgrade did not finish');
+if (doc7.version !== 2) throw new Error('version not bumped');
+if (doc7.changelog.length !== 1 || !doc7.changelog[0].summary) throw new Error('changelog entry missing');
+const js7 = doc7.files.find((f) => f.path === 'js/app.js');
+if (!js7 || !/upgrade applied/.test(js7.content)) throw new Error('js file not upgraded');
+if (!/console\.log\('App ready'\)/.test(js7.content)) throw new Error('upgrade destroyed existing content');
+const html7 = doc7.files.find((f) => f.path === 'index.html');
+if (!html7 || !/<\/html>/i.test(html7.content)) throw new Error('upgrade destroyed html');
+console.log(`    v1 content preserved + v2 patches applied ✓`);
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');
