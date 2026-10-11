@@ -18,8 +18,10 @@
 - **Solo mode** — pick one model and chat directly, streamed.
 - **Models**: **DeepSeek** (V3 / R1), **Qwen** (Qwen3 Max / Coder via DashScope), **Claude** (Opus / Sonnet / Haiku), **ChatGPT** (GPT-4o / 4.1) — plus **free** access through **OpenRouter's free tier** (one free key) and **Pollinations** (no key at all).
 - **Zero-key free mode** — works out of the box via Pollinations; add keys whenever you want the frontier models.
-- **Live code preview** — every HTML/CSS/JS code block gets a **▶ PREVIEW** button (sandboxed iframe + captured console), plus a full **Canvas** editor with live preview.
-- **OLED-black bold UI** — pure `#000`, Space Grotesk bold type, 5 neon accent themes, multiple views (Chat / Agents / Canvas / Keys & Models).
+- **Live code preview** — every HTML/CSS/JS code block gets a **Preview** button (sandboxed iframe + captured console), plus a full **Canvas** editor with live preview.
+- **OLED-black professional UI** — pure `#000`, Inter + Space Grotesk typography, 5 refined accent themes, multiple views (Chat / Agents / Canvas / Keys & Models).
+- **Phone-friendly** — mobile-first responsive layout: drawer navigation, bottom-sheet model picker, fullscreen agent pipeline, Code/Preview pane switch on Canvas, safe-area support and touch-sized targets.
+- **Smooth streaming** — stage-aware loading states ("Planning → Drafting → Reviewing → Synthesizing"), shimmer indicators, a glowing caret that follows the text, and a fast un-highlighted parser while streaming with full syntax highlighting on completion.
 - **Keys stay yours** — stored in your browser's localStorage, sent per-request directly to the provider (or through your own local proxy). Nothing is ever stored server-side.
 
 ## 🚀 Run it

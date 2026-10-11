@@ -65,8 +65,8 @@ export default function AgentsPanel() {
     <div className="agents-panel">
       <div className="agents-panel-head">
         <IconAgents size={16} />
-        <span>AGENT PIPELINE</span>
-        {done ? <span className="agents-panel-done">COMPLETE</span> : <span className="agents-panel-live"><span className="led" /> LIVE</span>}
+        <span>Agent pipeline</span>
+        {done ? <span className="agents-panel-done">Complete</span> : <span className="agents-panel-live"><span className="led" /> Live</span>}
         <button className="icon-btn" onClick={() => actions.setAgentsOpen(false)}>
           <IconX size={15} />
         </button>
@@ -87,7 +87,7 @@ export default function AgentsPanel() {
       {agents.length === 0 ? (
         <div className="agents-empty">
           <IconBolt size={18} />
-          <p>No pipeline yet. Send a message in <b>TEAM</b> mode and the agents will appear here in real time.</p>
+          <p>No pipeline yet. Send a message in <b>Team</b> mode and the agents will appear here in real time.</p>
         </div>
       ) : (
         <div className="agents-list">
@@ -99,7 +99,7 @@ export default function AgentsPanel() {
 
       {msg?.verdict ? (
         <div className="verdict">
-          ★ REVIEWER PICKED <b>DRAFT {msg.verdict}</b>
+          Reviewer picked <b>Draft {msg.verdict}</b>
         </div>
       ) : null}
     </div>

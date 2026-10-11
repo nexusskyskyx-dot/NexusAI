@@ -6,6 +6,7 @@ import AgentsView from '@components/AgentsView.jsx';
 import CanvasView from '@components/CanvasView.jsx';
 import KeysView from '@components/KeysView.jsx';
 import PreviewModal from '@components/PreviewModal.jsx';
+import MobileBar from '@components/MobileBar.jsx';
 
 function Toasts() {
   const s = useStore();
@@ -38,6 +39,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <MobileBar />
       <Sidebar />
       <main className="main">
         {s.view === 'chat' && <ChatView />}

@@ -81,8 +81,8 @@ export default function AgentsView() {
       <header className="page-head">
         <IconAgents size={22} />
         <div>
-          <h1>AGENT SQUAD</h1>
-          <p>Configure the models that collaborate on every TEAM-mode answer.</p>
+          <h1>Agent squad</h1>
+          <p>Configure the models that collaborate on every Team-mode answer.</p>
         </div>
       </header>
 
@@ -99,13 +99,13 @@ export default function AgentsView() {
 
       <section className="panel">
         <div className="panel-head">
-          <h2>DRAFTERS — parallel competitors</h2>
+          <h2>Drafters — parallel competitors</h2>
           <div className="panel-actions">
             <button className="btn btn-ghost btn-sm" onClick={addWorker} disabled={workers.length >= 4}>
-              + ADD DRAFTER
+              + Add drafter
             </button>
             <button className="btn btn-acc btn-sm" onClick={() => { actions.applyRecommendedSquad(); actions.toast('Recommended squad applied ⚡'); }}>
-              ⚡ RECOMMENDED SQUAD
+              Recommended squad
             </button>
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function AgentsView() {
           {workers.map((w, i) => (
             <div className="worker-row" key={i}>
               <span className="worker-letter">{String.fromCharCode(65 + i)}</span>
-              <SlotPicker label={`DRAFTER ${String.fromCharCode(65 + i)}`} value={w} onChange={(v) => setWorker(i, v)} />
+              <SlotPicker label={`Drafter ${String.fromCharCode(65 + i)}`} value={w} onChange={(v) => setWorker(i, v)} />
               <button className="icon-btn worker-del" onClick={() => removeWorker(i)} title="Remove drafter">
                 <IconTrash size={14} />
               </button>
@@ -130,35 +130,35 @@ export default function AgentsView() {
 
       <section className="panel">
         <div className="panel-head">
-          <h2>CONTROL AGENTS</h2>
+          <h2>Control agents</h2>
           <div className="panel-actions">
             <label className="toggle">
               <input type="checkbox" checked={s.settings.planner !== false} onChange={(e) => actions.setSettings({ planner: e.target.checked })} />
-              PLANNER
+              Planner
             </label>
             <label className="toggle">
               <input type="checkbox" checked={s.settings.critic !== false} onChange={(e) => actions.setSettings({ critic: e.target.checked })} />
-              REVIEWER
+              Reviewer
             </label>
             <label className="toggle">
               <input type="checkbox" checked={s.settings.stagger !== false} onChange={(e) => actions.setSettings({ stagger: e.target.checked })} />
-              STAGGER (rate-limit safety)
+              Stagger (rate-limit safety)
             </label>
           </div>
         </div>
         <div className="ctrl-grid">
-          <SlotPicker label="⌘ PLANNER MODEL" value={squad.planner} onChange={(v) => actions.setSquad({ planner: v })} hint="writes the brief" />
-          <SlotPicker label="☰ REVIEWER MODEL" value={squad.critic} onChange={(v) => actions.setSquad({ critic: v })} hint="judges the drafts" />
-          <SlotPicker label="★ SYNTHESIZER MODEL" value={squad.synth} onChange={(v) => actions.setSquad({ synth: v })} hint="writes the final answer" />
+          <SlotPicker label="⌘ Planner model" value={squad.planner} onChange={(v) => actions.setSquad({ planner: v })} hint="writes the brief" />
+          <SlotPicker label="☰ Reviewer model" value={squad.critic} onChange={(v) => actions.setSquad({ critic: v })} hint="judges the drafts" />
+          <SlotPicker label="★ Synthesizer model" value={squad.synth} onChange={(v) => actions.setSquad({ synth: v })} hint="writes the final answer" />
         </div>
       </section>
 
       <section className="panel">
         <div className="panel-head">
-          <h2>RECENT TEAM RUNS</h2>
+          <h2>Recent team runs</h2>
         </div>
         {s.runs.length === 0 ? (
-          <div className="agents-empty">No team runs yet — send a message in TEAM mode.</div>
+          <div className="agents-empty">No team runs yet — send a message in Team mode.</div>
         ) : (
           <div className="runs">
             {s.runs.map((r, i) => (

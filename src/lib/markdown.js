@@ -1,29 +1,35 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// NexusAI · Markdown → sanitized HTML with optional syntax highlighting
+// NexusAI · Markdown → sanitized HTML
+// Two parser instances: a fast one for streaming (no syntax highlighting) and
+// a full one with highlight.js for the final render. Keeps long streaming
+// answers smooth — hljs only runs once, when the message completes.
 // ─────────────────────────────────────────────────────────────────────────────
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js/lib/common';
 import DOMPurify from 'dompurify';
 
-let configured = false;
-function configure() {
-  if (configured) return;
-  configured = true;
-  marked.use(
-    markedHighlight({
-      langPrefix: 'hljs language-',
-      highlight(code, lang) {
-        if (lang && hljs.getLanguage(lang)) {
-          try {
-            return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
-          } catch {}
-        }
-        return '';
-      },
-    })
-  );
-  marked.use({ breaks: true, gfm: true });
+const mdStream = new Marked({ breaks: true, gfm: true });
+
+const mdFull = new Marked({ breaks: true, gfm: true });
+mdFull.use(
+  markedHighlight({
+    langPrefix: 'hljs language-',
+    highlight(code, lang) {
+      if (lang && hljs.getLanguage(lang)) {
+        try {
+          return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+        } catch {}
+      }
+      return '';
+    },
+  })
+);
+
+let hooked = false;
+function hookPurify() {
+  if (hooked) return;
+  hooked = true;
   DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     if (node.tagName === 'A') {
       node.setAttribute('target', '_blank');
@@ -33,19 +39,12 @@ function configure() {
 }
 
 export function renderMarkdown(text, { highlight = true } = {}) {
-  configure();
+  hookPurify();
   const clean = String(text || '')
     // strip leaked chain-of-thought blocks from reasoning models
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<think>/gi, '');
-  let html;
-  if (highlight) {
-    html = marked.parse(clean);
-  } else {
-    // cheap escape path during streaming (fast, no highlight flicker)
-    html = marked.parse(clean, { renderer: undefined });
-  }
-  return DOMPurify.sanitize(html, {
-    ADD_ATTR: ['target', 'rel'],
-  });
+  const parser = highlight ? mdFull : mdStream;
+  const html = parser.parse(clean);
+  return DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] });
 }

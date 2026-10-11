@@ -6,6 +6,7 @@ const I = ({ d, size = 18, sw = 2, fill = 'none', children }) => (
 );
 
 export const IconChat = (p) => <I {...p} d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />;
+export const IconMenu = (p) => <I {...p} d="M3 6h18M3 12h18M3 18h18" />;
 export const IconAgents = (p) => (
   <I {...p}>
     <rect x="7" y="7" width="10" height="10" rx="2" />

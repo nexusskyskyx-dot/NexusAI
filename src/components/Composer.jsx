@@ -29,10 +29,10 @@ export default function Composer() {
         <div className="composer-top">
           <div className="mode-switch" role="tablist">
             <button className={`mode-btn ${mode === 'solo' ? 'on' : ''}`} onClick={() => actions.setSettings({ mode: 'solo' })} title="One model answers directly">
-              <IconBolt size={13} /> SOLO
+              <IconBolt size={13} /> Solo
             </button>
             <button className={`mode-btn ${mode === 'team' ? 'on' : ''}`} onClick={() => actions.setSettings({ mode: 'team' })} title="Planner → Drafters → Reviewer → Synthesizer">
-              <IconAgents size={13} /> TEAM
+              <IconAgents size={13} /> Team
             </button>
           </div>
 
@@ -41,13 +41,13 @@ export default function Composer() {
           ) : (
             <button className="model-chip team-chip" onClick={() => actions.setView('agents')} title="Configure the agent squad">
               <span className="model-chip-dot" />
-              {(s.squad.workers || []).filter((w) => w && w.model).length} DRAFTERS + REVIEW
+              {(s.squad.workers || []).filter((w) => w && w.model).length} drafters
               <span className="model-chip-sep">·</span>
-              CONFIGURE
+              Configure
             </button>
           )}
 
-          <div className="composer-hint">ENTER ⏎ SEND · SHIFT+ENTER NEWLINE</div>
+          <div className="composer-hint">Enter ↵ send · Shift+Enter newline</div>
         </div>
 
         <div className="composer-main">
@@ -65,11 +65,11 @@ export default function Composer() {
             rows={1}
           />
           {s.streaming ? (
-            <button className="btn btn-stop" onClick={() => actions.stopGeneration()} title="Stop generation">
-              <IconStop size={16} />
+            <button className="btn-stop" onClick={() => actions.stopGeneration()} title="Stop generation" aria-label="Stop generation">
+              <IconStop size={15} />
             </button>
           ) : (
-            <button className="btn btn-send" onClick={send} disabled={!text.trim()} title="Send">
+            <button className="btn-send" onClick={send} disabled={!text.trim()} title="Send" aria-label="Send">
               <IconSend size={17} />
             </button>
           )}
@@ -77,8 +77,8 @@ export default function Composer() {
       </div>
       <div className="composer-note">
         {mode === 'team'
-          ? 'TEAM MODE — Planner writes a brief, drafters compete in parallel, the reviewer merges, the synthesizer ships the final answer.'
-          : 'SOLO MODE — the selected model answers directly, streamed.'}
+          ? 'Planner briefs the drafters · reviewer merges · synthesizer ships the final answer'
+          : 'One model, streamed directly'}
       </div>
     </div>
   );

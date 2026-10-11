@@ -47,7 +47,7 @@ function ProviderCard({ p }) {
         </div>
         <div className={`provider-status ${available ? 'ok' : 'nokey'}`}>
           <span className="led" />
-          {available ? (p.needsKey ? (envKeyed ? 'ENV KEY ON SERVER' : 'KEY SAVED') : 'READY — NO KEY') : 'KEY REQUIRED'}
+          {available ? (p.needsKey ? (envKeyed ? 'Env key on server' : 'Key saved') : 'Ready — no key') : 'Key required'}
         </div>
       </div>
 
@@ -67,18 +67,18 @@ function ProviderCard({ p }) {
             </button>
           </div>
           <button className="btn btn-acc btn-sm" disabled={!val.trim() && !saved} onClick={() => { actions.setKeys({ [p.id]: val.trim() }); actions.toast(`${p.name} key saved ✓`); setTestResult(null); }}>
-            SAVE
+            Save
           </button>
           <button className="btn btn-ghost btn-sm" disabled={testing || (!val.trim() && !saved)} onClick={test}>
-            {testing ? 'TESTING…' : 'TEST'}
+            {testing ? 'Testing…' : 'Test'}
           </button>
           {saved ? (
             <button className="btn btn-ghost btn-sm" onClick={() => { actions.removeKey(p.id); setVal(''); setTestResult(null); }}>
-              REMOVE
+              Remove
             </button>
           ) : null}
           <a className="btn btn-ghost btn-sm" href={p.keyUrl} target="_blank" rel="noreferrer">
-            GET KEY <IconExternal size={12} />
+            Get key <IconExternal size={12} />
           </a>
         </div>
       ) : (
@@ -88,7 +88,7 @@ function ProviderCard({ p }) {
           </span>
           {p.keyUrl ? (
             <a className="btn btn-ghost btn-sm" href={p.keyUrl} target="_blank" rel="noreferrer">
-              WEBSITE <IconExternal size={12} />
+              Website <IconExternal size={12} />
             </a>
           ) : null}
         </div>
@@ -120,7 +120,7 @@ export default function KeysView() {
       <header className="page-head">
         <IconKeys size={22} />
         <div>
-          <h1>KEYS & MODELS</h1>
+          <h1>Keys & models</h1>
           <p>Bring your own keys — they live in your browser only and go straight to the provider.</p>
         </div>
       </header>
@@ -135,7 +135,7 @@ export default function KeysView() {
       <section className="panel">
         <div className="panel-head">
           <h2>
-            <IconSettings size={15} /> CONNECTION
+            <IconSettings size={15} /> Connection
           </h2>
         </div>
         <div className="transport-row">

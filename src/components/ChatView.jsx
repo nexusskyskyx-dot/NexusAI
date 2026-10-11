@@ -37,20 +37,23 @@ function Hero() {
   const freeReady = !Object.values(s.keys).filter(Boolean).length;
   return (
     <div className="hero">
-      <div className="hero-logo"><Logo size={64} /></div>
+      <div className="hero-logo">
+        <Logo size={58} />
+      </div>
       <h1 className="hero-title">
         NEXUS<span>AI</span>
       </h1>
-      <p className="hero-sub">MULTI-AGENT CHAT INTELLIGENCE — DEEPSEEK · QWEN · CLAUDE · GPT · FREE</p>
+      <p className="hero-sub">Multi-agent chat intelligence</p>
       <div className="hero-pipeline">
-        <span className="hp">PLANNER</span> <span className="hp-arrow">──▶</span>
-        <span className="hp">DRAFTERS ×N</span> <span className="hp-arrow">──▶</span>
-        <span className="hp">REVIEWER</span> <span className="hp-arrow">──▶</span>
-        <span className="hp">SYNTHESIZER</span>
+        <span className="hp">Planner</span> <span className="hp-arrow">→</span>
+        <span className="hp">Drafters</span> <span className="hp-arrow">→</span>
+        <span className="hp">Reviewer</span> <span className="hp-arrow">→</span>
+        <span className="hp">Synthesizer</span>
       </div>
+      <p className="hero-models">DeepSeek · Qwen · Claude · GPT · free zero-key models</p>
       {freeReady ? (
         <div className="hero-free">
-          <span className="led" /> ZERO-KEY FREE MODE ACTIVE — POWERED BY POLLINATIONS. ADD KEYS ANYTIME FOR DEEPSEEK / QWEN / CLAUDE / GPT.
+          <span className="led" /> Free mode active — no keys needed. Add keys anytime for frontier models.
         </div>
       ) : null}
       <div className="suggestions">
@@ -111,24 +114,25 @@ export default function ChatView() {
     <div className="chatview">
       <header className="chat-head">
         <div className="chat-head-title">
-          <span className="chat-head-name">{conv?.title || 'NEW CHAT'}</span>
+          <span className="chat-head-name">{conv?.title || 'New chat'}</span>
           <span className="chat-head-meta">
-            {messages.length} MSG{messages.length === 1 ? '' : 'S'} · {s.settings.mode === 'team' ? 'TEAM MODE' : 'SOLO MODE'}
+            {messages.length} {messages.length === 1 ? 'message' : 'messages'} ·{' '}
+            {s.settings.mode === 'team' ? 'Team mode' : 'Solo mode'}
           </span>
         </div>
         <div className="chat-head-actions">
           {messages.some((m) => m.mode === 'team') ? (
             <button className={`btn btn-ghost btn-sm ${s.agentsOpen ? 'on' : ''}`} onClick={() => actions.setAgentsOpen(!s.agentsOpen)}>
-              <IconAgents size={14} /> PIPELINE
+              <IconAgents size={14} /> Pipeline
             </button>
           ) : null}
           {messages.length ? (
             <button className="btn btn-ghost btn-sm" onClick={exportChat} title="Export as Markdown">
-              <IconDownload size={14} /> EXPORT
+              <IconDownload size={14} /> Export
             </button>
           ) : null}
-          <button className="btn btn-ghost btn-sm" onClick={() => actions.newConversation()}>
-            <IconPlus size={14} /> NEW
+          <button className="btn btn-ghost btn-sm hide-sm" onClick={() => actions.newConversation()}>
+            <IconPlus size={14} /> New
           </button>
         </div>
       </header>

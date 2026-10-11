@@ -4,8 +4,16 @@ import { renderMarkdown } from '@lib/markdown.js';
 import { previewableLang, extForLang } from '@lib/preview.js';
 import { IconCopy, IconCheck, IconRefresh, IconTrash, IconEdit, IconBrain, IconAgents, IconEye } from './Icons.jsx';
 
+const STAGE_LABELS = {
+  plan: 'Planning the approach',
+  draft: 'Drafting in parallel',
+  review: 'Reviewing the drafts',
+  synthesize: 'Synthesizing the final answer',
+  done: 'Finishing up',
+};
+
 // Attach interactive toolbars to rendered <pre><code> blocks
-function enhanceCodeBlocks(root, msgStreaming) {
+function enhanceCodeBlocks(root) {
   if (!root) return;
   const pres = root.querySelectorAll('pre');
   pres.forEach((pre) => {
@@ -33,15 +41,15 @@ function enhanceCodeBlocks(root, msgStreaming) {
       return b;
     };
 
-    mkBtn('COPY', 'Copy code', async (e) => {
+    mkBtn('Copy', 'Copy code', async (e) => {
       try {
         await navigator.clipboard.writeText(raw);
-        e.currentTarget.textContent = 'COPIED ✓';
-        setTimeout(() => (e.currentTarget.textContent = 'COPY'), 1400);
+        e.currentTarget.textContent = 'Copied ✓';
+        setTimeout(() => (e.currentTarget.textContent = 'Copy'), 1400);
       } catch {}
     });
 
-    mkBtn('SAVE', 'Download file', () => {
+    mkBtn('Save', 'Download file', () => {
       const blob = new Blob([raw], { type: 'text/plain' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -51,7 +59,7 @@ function enhanceCodeBlocks(root, msgStreaming) {
     });
 
     if (previewableLang(lang)) {
-      mkBtn('▶ PREVIEW', 'Live preview', () => {
+      mkBtn('Preview', 'Live preview', () => {
         window.dispatchEvent(new CustomEvent('nexus-preview', { detail: { code: raw, lang, title: `Preview · ${lang}` } }));
       }, 'acc');
     }
@@ -67,7 +75,7 @@ function Reasoning({ text }) {
     <div className="reasoning">
       <button className="reasoning-head" onClick={() => setOpen((o) => !o)}>
         <IconBrain size={14} />
-        <span>THOUGHT PROCESS</span>
+        <span>Thought process</span>
         <span className="reasoning-len">{text.length.toLocaleString()} chars</span>
         <span className="reasoning-caret">{open ? '▾' : '▸'}</span>
       </button>
@@ -83,15 +91,11 @@ function TeamBadge({ msg }) {
   if (!agents.length) return null;
   return (
     <div className="team-trace">
-      <button
-        className="team-trace-btn"
-        onClick={() => actions.setAgentsOpen(true)}
-        title="Open agent pipeline"
-      >
+      <button className="team-trace-btn" onClick={() => actions.setAgentsOpen(true)} title="Open agent pipeline">
         <IconAgents size={13} />
-        <span>AGENT PIPELINE</span>
+        <span>Agent pipeline</span>
         <span className="team-trace-count">
-          {ok.length} OK{failed.length ? ` · ${failed.length} FAILED` : ''}
+          {ok.length} ok{failed.length ? ` · ${failed.length} failed` : ''}
         </span>
       </button>
       <div className="team-models">
@@ -127,18 +131,11 @@ export default function Message({ msg, isLast }) {
   const [editText, setEditText] = useState('');
   const [copied, copy] = useCopy();
 
-  const html = useMemo(
-    () => renderMarkdown(msg.content || '', { highlight: !msg.streaming }),
-    [msg.content, msg.streaming]
-  );
+  const html = useMemo(() => renderMarkdown(msg.content || '', { highlight: !msg.streaming }), [msg.content, msg.streaming]);
 
   useEffect(() => {
-    if (!msg.streaming) enhanceCodeBlocks(bodyRef.current);
+    enhanceCodeBlocks(bodyRef.current);
   }, [msg.content, msg.streaming]);
-
-  useEffect(() => {
-    if (msg.streaming) enhanceCodeBlocks(bodyRef.current, true);
-  }, [msg.content]);
 
   if (msg.role === 'user') {
     return (
@@ -148,11 +145,17 @@ export default function Message({ msg, isLast }) {
             <div className="msg-edit">
               <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} autoFocus />
               <div className="msg-edit-actions">
-                <button className="btn btn-acc btn-sm" onClick={() => { setEditing(false); if (editText.trim()) actions.editUserMessage(msg.id, editText); }}>
-                  SAVE & RERUN
+                <button
+                  className="btn btn-acc btn-sm"
+                  onClick={() => {
+                    setEditing(false);
+                    if (editText.trim()) actions.editUserMessage(msg.id, editText);
+                  }}
+                >
+                  Save & rerun
                 </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
-                  CANCEL
+                  Cancel
                 </button>
               </div>
             </div>
@@ -160,7 +163,14 @@ export default function Message({ msg, isLast }) {
             <>
               <div className="msg-user-text">{msg.content}</div>
               <div className="msg-user-actions">
-                <button className="icon-btn" title="Edit & resend" onClick={() => { setEditing(true); setEditText(msg.content); }}>
+                <button
+                  className="icon-btn"
+                  title="Edit & resend"
+                  onClick={() => {
+                    setEditing(true);
+                    setEditText(msg.content);
+                  }}
+                >
                   <IconEdit size={13} />
                 </button>
                 <button className="icon-btn" title="Delete" onClick={() => actions.deleteMessage(msg.id)}>
@@ -176,13 +186,21 @@ export default function Message({ msg, isLast }) {
 
   // assistant
   const empty = !msg.content && msg.streaming;
+  const lastStage = msg.stages?.length ? msg.stages[msg.stages.length - 1].stage : null;
 
   return (
     <div className="msg msg-ai">
       <div className="msg-ai-head">
-        <span className="msg-ai-brand">⬡ NEXUS{msg.mode === 'team' ? ' TEAM' : 'AI'}</span>
+        <span className="msg-ai-brand">⬡ NEXUSAI</span>
+        {msg.mode === 'team' ? <span className="msg-ai-mode">Team</span> : null}
         {msg.model && <span className="msg-ai-model">{msg.model}</span>}
-        {msg.streaming && <span className="typing"><i></i><i></i><i></i></span>}
+        {msg.streaming ? (
+          <span className="typing">
+            <i></i>
+            <i></i>
+            <i></i>
+          </span>
+        ) : null}
         {!msg.streaming && msg.ms ? <span className="msg-ai-meta">{(msg.ms / 1000).toFixed(1)}s</span> : null}
         {!msg.streaming && msg.content ? (
           <span className="msg-ai-actions">
@@ -206,26 +224,19 @@ export default function Message({ msg, isLast }) {
 
       {empty ? (
         <div className="msg-ai-wait">
-          {msg.mode === 'team' ? (
-            <span>
-              <IconAgents size={14} /> Agents are organizing — watch the pipeline →
-            </span>
-          ) : (
-            <span>
-              <IconEye size={14} /> Thinking…
-            </span>
-          )}
+          <span className="shimmer" />
+          <span className="wait-label">
+            {msg.mode === 'team' ? STAGE_LABELS[lastStage] || 'Assembling the team' : 'Thinking'}
+            <span className="wait-dots">…</span>
+          </span>
+          {msg.mode === 'team' ? <span className="wait-sub">Follow the agents in the pipeline panel</span> : null}
         </div>
       ) : (
-        <div
-          ref={bodyRef}
-          className={`md ${msg.streaming ? 'streaming' : ''}`}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+        <div ref={bodyRef} className={`md ${msg.streaming ? 'streaming' : ''}`} dangerouslySetInnerHTML={{ __html: html }} />
       )}
 
       {msg.error ? <div className="msg-error">⚠ {msg.error}</div> : null}
-      {msg.aborted ? <div className="msg-aborted">■ STOPPED BY USER</div> : null}
+      {msg.aborted ? <div className="msg-aborted">Stopped by user</div> : null}
     </div>
   );
 }

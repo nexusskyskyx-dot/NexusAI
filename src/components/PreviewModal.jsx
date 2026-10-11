@@ -50,7 +50,7 @@ export default function PreviewModal() {
   return (
     <div className="pmodal">
       <div className="pmodal-bar">
-        <span className="pmodal-title">▶ {req.title || 'LIVE PREVIEW'}</span>
+        <span className="pmodal-title">▶ {req.title || 'Live preview'}</span>
         <span className="pmodal-actions">
           <button className={`btn btn-sm ${device === 'desktop' ? 'btn-acc' : 'btn-ghost'}`} onClick={() => setDevice('desktop')} title="Desktop">
             <IconMonitor size={14} />
@@ -84,7 +84,7 @@ export default function PreviewModal() {
         </div>
         {showConsole ? (
           <div className="pmodal-console" ref={logRef}>
-            <div className="pconsole-head">CONSOLE</div>
+            <div className="pconsole-head">Console</div>
             {logs.length === 0 ? <div className="pconsole-line dim">— no output yet (console.log from the preview appears here) —</div> : null}
             {logs.map((l, i) => (
               <div key={i} className={`pconsole-line ${l.level}`}>

@@ -44,14 +44,16 @@ export default function CanvasView() {
   const [logs, setLogs] = useState([]);
   const [showConsole, setShowConsole] = useState(true);
   const [auto, setAuto] = useState(true);
-  const taRef = useRef(null);
+  const [pane, setPane] = useState('code'); // mobile pane switch
   const logRef = useRef(null);
   const debounce = useRef(null);
 
   const doc = buildDoc({ html: files['index.html'] || '', css: files['style.css'] || '', js: files['app.js'] || '' });
 
   useEffect(() => {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(files)); } catch {}
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(files));
+    } catch {}
   }, [files]);
 
   useEffect(() => {
@@ -70,7 +72,10 @@ export default function CanvasView() {
     setFiles((f) => ({ ...f, [active]: v }));
     if (auto) {
       clearTimeout(debounce.current);
-      debounce.current = setTimeout(() => { setLogs([]); setNonce((n) => n + 1); }, 500);
+      debounce.current = setTimeout(() => {
+        setLogs([]);
+        setNonce((n) => n + 1);
+      }, 500);
     }
   };
 
@@ -82,7 +87,9 @@ export default function CanvasView() {
       const v = files[active];
       const next = v.slice(0, a) + '  ' + v.slice(b);
       setFiles((f) => ({ ...f, [active]: next }));
-      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = a + 2; });
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = a + 2;
+      });
     }
   };
 
@@ -114,30 +121,38 @@ export default function CanvasView() {
       <header className="page-head">
         <IconCode size={22} />
         <div>
-          <h1>CANVAS</h1>
+          <h1>Canvas</h1>
           <p>Code side. Preview side. Zero friction.</p>
         </div>
         <div className="page-head-actions">
+          <div className="pane-switch">
+            <button className={pane === 'code' ? 'on' : ''} onClick={() => setPane('code')}>
+              Code
+            </button>
+            <button className={pane === 'preview' ? 'on' : ''} onClick={() => setPane('preview')}>
+              Preview
+            </button>
+          </div>
           <label className="toggle">
-            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> LIVE
+            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Live
           </label>
           <button className="btn btn-ghost btn-sm" onClick={() => { setLogs([]); setNonce((n) => n + 1); }}>
-            <IconPlay size={13} /> RUN
+            <IconPlay size={13} /> Run
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={openExternal}>
-            <IconExternal size={13} /> OPEN
+          <button className="btn btn-ghost btn-sm hide-sm" onClick={openExternal}>
+            <IconExternal size={13} /> Open
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={download}>
-            <IconDownload size={13} /> EXPORT
+          <button className="btn btn-ghost btn-sm hide-sm" onClick={download}>
+            <IconDownload size={13} /> Export
           </button>
           <button className="btn btn-acc btn-sm" onClick={askNexus}>
-            <IconBolt size={13} /> ASK NEXUSAI
+            <IconBolt size={13} /> Ask NexusAI
           </button>
         </div>
       </header>
 
       <div className="canvas-body">
-        <div className="canvas-editor">
+        <div className={`canvas-editor ${pane !== 'code' ? 'pane-off' : ''}`}>
           <div className="file-tabs">
             {Object.keys(files).map((f) => (
               <button key={f} className={`file-tab ${active === f ? 'on' : ''}`} onClick={() => setActive(f)}>
@@ -147,13 +162,16 @@ export default function CanvasView() {
             <button
               className="file-tab reset"
               title="Reset to demo"
-              onClick={() => { setFiles({ ...DEFAULT_FILES }); setLogs([]); setNonce((n) => n + 1); }}
+              onClick={() => {
+                setFiles({ ...DEFAULT_FILES });
+                setLogs([]);
+                setNonce((n) => n + 1);
+              }}
             >
-              ⟲ RESET
+              ⟲ Reset
             </button>
           </div>
           <textarea
-            ref={taRef}
             className="canvas-ta"
             spellCheck={false}
             value={files[active]}
@@ -162,13 +180,13 @@ export default function CanvasView() {
           />
         </div>
 
-        <div className="canvas-preview">
+        <div className={`canvas-preview ${pane !== 'preview' ? 'pane-off' : ''}`}>
           <div className="canvas-frame">
             <iframe key={nonce} title="canvas" sandbox="allow-scripts allow-modals allow-forms allow-popups" srcDoc={doc} />
           </div>
           <div className={`canvas-console ${showConsole ? '' : 'hidden'}`} ref={logRef}>
             <div className="pconsole-head" onClick={() => setShowConsole((x) => !x)}>
-              <IconTerminal size={12} /> CONSOLE {logs.length ? `(${logs.length})` : ''}
+              <IconTerminal size={12} /> Console {logs.length ? `(${logs.length})` : ''}
             </div>
             {logs.map((l, i) => (
               <div key={i} className={`pconsole-line ${l.level}`}>

@@ -20,6 +20,7 @@ let state = {
   activeId: null,
   view: 'chat',
   agentsOpen: false,
+  sidebarOpen: false,
   streaming: false,
   streamMsg: null, // {convId, msgId}
   toasts: [],
@@ -80,7 +81,7 @@ function queueStreamPatch(convId, msgId, patch) {
     streamBuf = { convId, msgId, patch: {}, timer: null };
   }
   Object.assign(streamBuf.patch, patch);
-  if (!streamBuf.timer) streamBuf.timer = setTimeout(flushStreamBuf, 60);
+  if (!streamBuf.timer) streamBuf.timer = setTimeout(flushStreamBuf, 48);
 }
 function flushStreamBuf() {
   if (!streamBuf) return;
@@ -418,6 +419,7 @@ export const actions = {
   boot,
   setView: (view) => setState({ view }),
   setAgentsOpen: (v) => setState({ agentsOpen: v }),
+  setSidebarOpen: (v) => setState({ sidebarOpen: v }),
   setSettings: (patch) => setState((s) => ({ settings: { ...s.settings, ...patch } }), { persist: true }),
   setAccent: (accent) => {
     document.documentElement.dataset.acc = accent;
