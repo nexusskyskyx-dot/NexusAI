@@ -161,6 +161,7 @@ function pickFlavor(body) {
   if (/UPGRADE BUILDER/i.test(sys)) return 'ubuilder';
   if (/UPGRADE REPORT/i.test(sys)) return 'ureport';
   if (/COORDINATOR/i.test(sys)) return 'coordinator';
+  if (/VERIFIER/i.test(sys)) return 'verifier';
   if (/FILE BUILDER/i.test(sys)) return 'builder';
   if (/TESTER/i.test(sys)) return 'tester';
   if (/DEBUGGER/i.test(sys)) return 'debugger';
@@ -215,7 +216,7 @@ export function demoResponse(body) {
     return JSON.stringify({
       title,
       description: `A self-contained web app: ${idea.slice(0, 90)}`,
-      stack: ['html', 'css', 'js'],
+      features: ['clean responsive layout', 'OLED-dark theming', 'button interactivity', 'status feedback'],
       files: [
         { path: 'index.html', purpose: 'page structure and layout' },
         { path: 'css/style.css', purpose: 'all styling and theming' },
@@ -236,14 +237,52 @@ export function demoResponse(body) {
   }
 
   if (flavor === 'tester') {
-    // surgical: only report the noisy-log bug in files that actually contain it
+    // surgical: only report the noisy-log bug in files that actually contain it,
+    // with the real line number
     const blocks = [...String(raw).matchAll(/### (\S+)\n```\n([\s\S]*?)\n```/g)];
-    const buggy = blocks.find((b) => /console\.log\('clicked'/.test(b[2]));
-    if (!buggy) return JSON.stringify({ verdict: 'pass', bugs: [] });
-    return JSON.stringify({
-      verdict: 'issues',
-      bugs: [{ file: buggy[1], issue: 'console.log fires on every click — noisy in production', fix: 'remove the per-click log, keep the startup log' }],
+    const retest = /RE-TEST|re-test|Debugger just patched/i.test(raw);
+    const upgrade = /UPGRADE REQUEST/i.test(raw);
+    const bugs = [];
+    for (const b of blocks) {
+      const lines = b[2].split('\n');
+      const noisy = lines.findIndex((l) => /console\.log\('clicked'/.test(l));
+      if (noisy >= 0) {
+        bugs.push({ file: b[1], line: noisy + 1, issue: 'console.log fires on every click — noisy in production', fix: 'remove the per-click log, keep the startup log' });
+      }
+    }
+    // first test round only: one false alarm for the Verifier to catch
+    if (!retest && !upgrade) {
+      const css = blocks.find((b) => /\.css$/i.test(b[1]));
+      const html = blocks.find((b) => /\.html?$/i.test(b[1]));
+      if (css && html && /id="out"/.test(html[2])) {
+        bugs.push({ file: css[1], line: 1, issue: '#out selector may not match any element in index.html', fix: 'verify the element id exists' });
+      }
+    }
+    if (!bugs.length) return JSON.stringify({ verdict: 'pass', bugs: [] });
+    return JSON.stringify({ verdict: 'issues', bugs });
+  }
+
+  if (flavor === 'verifier') {
+    // second tester: re-check each report, confirm the real one, dismiss false alarms
+    const reports = [...String(raw).matchAll(/^\d+\.\s+(\S+?)(?::\d+)?\s+—\s+(.+?)(?:\s*\(suggested fix:|\s*$)/gm)].map((m) => ({ file: m[1], issue: m[2] }));
+    const blocks = [...String(raw).matchAll(/### (\S+)\n```\n([\s\S]*?)\n```/g)];
+    const results = reports.map((r) => {
+      // selector claim → check the id really exists in the html
+      const idm = r.issue.match(/#([a-zA-Z0-9_-]+)/);
+      if (idm) {
+        const html = blocks.find((b) => /\.html?$/i.test(b[1]));
+        if (html && new RegExp(`id=["']${idm[1]}["']`).test(html[2])) {
+          return { file: r.file, confirmed: false, reason: `false alarm — id="${idm[1]}" exists in ${html[1]}` };
+        }
+      }
+      const blk = blocks.find((b) => b[1] === r.file);
+      if (blk && /console\.log\('clicked'/.test(blk[2])) {
+        const line = blk[2].split('\n').findIndex((l) => /console\.log\('clicked'/.test(l)) + 1;
+        return { file: r.file, line, confirmed: true, reason: 'reproduced — the noisy log fires on every click' };
+      }
+      return { file: r.file, confirmed: false, reason: 'could not reproduce from the file contents' };
     });
+    return JSON.stringify({ results });
   }
 
   if (flavor === 'debugger') {

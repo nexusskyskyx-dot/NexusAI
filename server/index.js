@@ -31,6 +31,10 @@ const ENV_KEYS = {
   github: process.env.GITHUB_MODELS_TOKEN || process.env.GITHUB_TOKEN,
   mistral: process.env.MISTRAL_API_KEY,
   cerebras: process.env.CEREBRAS_API_KEY,
+  nvidia: process.env.NVIDIA_API_KEY || process.env.NVIDIA_NIM_API_KEY,
+  cohere: process.env.COHERE_API_KEY,
+  huggingface: process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY,
+  zai: process.env.ZAI_API_KEY || process.env.ZHIPU_API_KEY,
   'openai-images': process.env.OPENAI_API_KEY,
 };
 

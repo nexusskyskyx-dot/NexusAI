@@ -124,15 +124,37 @@ const doc6 = await runProject({
 });
 console.log(`[6] project — status=${doc6.status} title="${doc6.title}" in ${((Date.now() - t6) / 1000).toFixed(1)}s`);
 console.log(`    files: ${doc6.files.map((f) => `${f.path}(${f.status})`).join(' ')}`);
-console.log(`    stages: ${doc6.stages.join('→')} · bugs: ${doc6.testReport?.bugs?.length} · patched: ${doc6.testReport?.applied}`);
+console.log(`    stages: ${doc6.stages.join('→')}`);
+console.log(`    bugs: ${doc6.testReport?.bugs?.length} · confirmed: ${doc6.testReport?.confirmed} · dismissed: ${doc6.testReport?.dismissed} · patched: ${doc6.testReport?.applied} · retest: ${doc6.testReport?.retest}`);
 if (doc6.status !== 'done') throw new Error('project did not finish');
+if (doc6.stages.join('→') !== 'plan→build→test→verify→debug→retest→docs→report') throw new Error('stage order wrong: ' + doc6.stages.join('→'));
 if (!doc6.files.some((f) => f.path === 'index.html' && f.content)) throw new Error('no index.html');
 if (!doc6.files.some((f) => f.path === 'README.md')) throw new Error('no README');
-if (!doc6.testReport?.bugs?.length) throw new Error('tester found no bugs');
-if (doc6.testReport.applied < 1) throw new Error('debugger applied no patches');
+if (doc6.testReport?.bugs?.length !== 2) throw new Error('tester should report 2 bugs (1 real + 1 false alarm), got ' + doc6.testReport?.bugs?.length);
+if (doc6.testReport.confirmed !== 1 || doc6.testReport.dismissed !== 1) throw new Error('verifier did not split confirmed/dismissed');
+const realBug = doc6.testReport.bugs.find((b) => b.file === 'js/app.js');
+const fakeBug = doc6.testReport.bugs.find((b) => b.file === 'css/style.css');
+if (!realBug || realBug.confirmed !== true || typeof realBug.line !== 'number' || realBug.line < 1) throw new Error('real bug not confirmed with a line number');
+if (!fakeBug || fakeBug.confirmed !== false) throw new Error('false alarm not dismissed by the verifier');
+if (doc6.testReport.applied !== 1) throw new Error('debugger applied wrong patch count');
+if (doc6.testReport.retest !== 'pass') throw new Error('re-test did not pass');
+const css6 = doc6.files.find((f) => f.path === 'css/style.css');
+if (css6 && css6.status === 'patched') throw new Error('debugger touched the dismissed bug — must not happen');
 if (!doc6.report || doc6.report.length < 80) throw new Error('no final report');
 const patched = doc6.files.find((f) => f.path === 'js/app.js');
 if (patched && /console\.log\('clicked'/.test(patched.content)) throw new Error('bug not actually fixed');
+// chat transcript: the whole story must be narrated
+const roles6 = new Set((doc6.chat || []).filter((m) => m.kind === 'agent').map((m) => m.role));
+for (const r of ['coordinator', 'designer', 'coder', 'tester', 'verifier', 'debugger', 'documenter', 'reporter']) {
+  if (!roles6.has(r)) throw new Error('chat missing agent: ' + r);
+}
+if (!(doc6.chat || []).some((m) => m.kind === 'user')) throw new Error('chat missing the user message');
+if (!(doc6.chat || []).some((m) => m.kind === 'sys')) throw new Error('chat missing the final system message');
+const testerMsg = (doc6.chat || []).find((m) => m.role === 'tester' && m.id === 'tester');
+if (!testerMsg?.bugs?.length) throw new Error('tester chat message missing bug list');
+if (!(doc6.chat || []).some((m) => m.role === 'verifier' && m.results?.some((r) => r.confirmed === true && r.confirmed !== undefined && r.reason))) throw new Error('verifier chat message missing results');
+const toolMsg = (doc6.chat || []).find((m) => m.tools?.includes('write_file'));
+if (!toolMsg) throw new Error('no chat message shows tool usage');
 const preview = assemblePreview(doc6.files);
 if (!preview.includes('css/style.css') || preview.includes('href="css/style.css"')) {
   // css must be inlined (style tag) not left as a link
@@ -168,6 +190,9 @@ if (!js7 || !/upgrade applied/.test(js7.content)) throw new Error('js file not u
 if (!/console\.log\('App ready'\)/.test(js7.content)) throw new Error('upgrade destroyed existing content');
 const html7 = doc7.files.find((f) => f.path === 'index.html');
 if (!html7 || !/<\/html>/i.test(html7.content)) throw new Error('upgrade destroyed html');
+const upUser = (doc7.chat || []).filter((m) => m.kind === 'user');
+if (upUser.length < 1) throw new Error('upgrade chat missing the user message');
+if (!(doc7.chat || []).some((m) => m.id === 'up-planner' && m.done)) throw new Error('upgrade chat missing planner message');
 console.log(`    v1 content preserved + v2 patches applied ✓`);
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');

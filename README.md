@@ -5,30 +5,42 @@
 ```
 CHAT TEAM                                   PROJECT MODE
 ┌─────────┐    ┌──────────┐ ┌──────────┐    👋 FRIEND greets & suggests ideas
-│ PLANNER │ →  │ DRAFTER A│ │ DRAFTER B│         ↓
-└─────────┘    └──────────┘ └──────────┘    🧠 COORDINATOR plans files/folders
+│ PLANNER │ →  │ DRAFTER A│ │ DRAFTER B│         ↓  (you type in the CHAT)
+└─────────┘    └──────────┘ └──────────┘    🧠 COORDINATOR analyze_idea + plan_files
    brief         parallel drafts                  ↓
-┌──────────────┐    ┌─────────┐             🎨 DESIGNER + 💻 CODER write files
+┌──────────────┐    ┌─────────┐             🎨 DESIGNER + 💻 CODER write_file
 │ SYNTHESIZER  │ ←  │ REVIEW  │                  ↓ (live preview updates)
-└──────────────┘    └─────────┘             🧪 TESTER → 🔧 DEBUGGER → 📝 README
+└──────────────┘    └─────────┘             🧪 TESTER run_checks (bugs + lines)
      ⇄ any failed agent auto-switches            ↓
-       to the next available model            📊 FINAL REPORT + ZIP export
+       to the next available model            🔬 VERIFIER verify_bug — confirms
+                                                  or dismisses every report
                                               ↓
-                              ♻️ type any upgrade → files re-touched,
-                                re-tested, version bumped, changelog kept
+                                              🔧 DEBUGGER patch_file (confirmed only)
+                                                  ↓
+                                              🧪 TESTER re-tests → all pass ✅
+                                                  ↓
+                                              📝 DOCUMENTER · ⚡ OPTIMIZER → report
+                                                  ↓
+                                              📊 FINAL REPORT + ZIP export
+                                                  ↓
+                                  ♻️ type any upgrade → files re-touched,
+                                    re-verified, version bumped, changelog kept
 ```
+
+Every specialist has **its own prompt** (job + toolbox) — watch the whole story unfold in the **Chat** section while the **View Project** section fills with files, live preview, report and team roster.
 
 ## ✨ Features
 
 - **Multi-agent team mode** — a Planner writes a brief, up to 4 drafters (different models) compete in parallel, a Reviewer picks the winner, and a Synthesizer ships the final answer. Watch it all live in the **Agent Pipeline** panel.
-- **Project mode** ⭐ — a **Friend** agent greets you with ideas (or take your own). The **Coordinator** plans the file & folder structure, then **Designer / Coder / Tester / Debugger / Documenter / Optimizer** build a complete web project: files stream into a **file explorer** (folders, sizes, line counts), a **live preview** updates as they finish, the Tester finds bugs and the Debugger patches them, and you get a **final report** + one-click **ZIP export**. Works fully offline via the demo team.
+- **Project mode** ⭐ — a **Friend** agent greets you with ideas (or take your own). The room has exactly two sections: **Chat** (you talk, the team narrates) and **View Project** (Preview / Files / Report / Team tabs). Behind it: 🧠 Coordinator plans, 🎨 Designer + 💻 Coder stream every file into the explorer, 🧪 Tester hunts bugs with line numbers, 🔬 **Verifier** (tester 2) independently confirms or dismisses each report, 🔧 Debugger patches only the confirmed ones, the Tester **re-tests until everything passes**, then 📝 Documenter and ⚡ Optimizer ship the report + one-click **ZIP**. Works fully offline via the demo team.
+- **Every agent has its own prompt & tools** — each specialist runs on a dedicated system prompt that declares its job and its toolbox (`analyze_idea`, `write_file`, `run_checks`, `verify_bug`, `patch_file`, `write_readme`, `perf_audit`…). The tool calls are visible live in the chat and in the **Team** tab, which shows the full roster with each agent's job description and tools.
 - **Upgrade loop** ♻️ — a finished project isn't the end. Type any request in the project room's footer ("add sound effects", "make it mobile friendly", "polish the design") or tap a quick chip: the team **re-plans which files to touch**, rewrites them, re-tests and re-debugging patches, bumps the version and logs every change to an **upgrade changelog**. Every upgrade is incremental — existing content is preserved and only the requested parts change.
 - **Clean project room** — the v1.4 interface de-clutters the workspace: a quiet header with version pill, a thin dot-progress line, a tabbed right panel (**Preview / Report / Agents**) that swaps instead of stacking, and the upgrade footer tucked at the bottom.
 - **Automatic agent failover** — if any agent's model fails (bad key, rate limit, outage), the engine instantly switches that agent to the next available model from your fallback pool. The agent card shows the switch; the answer still ships.
 - **Solo mode** — pick one model and chat directly, streamed.
 - **Image generation** — a dedicated **Image** mode: Flux / Turbo via Pollinations (free, no key) or DALL·E 3 / GPT-Image 1 via your OpenAI key. Choose aspect ratio and 1/2/4 variations per prompt.
 - **Image studio** — click any generated image to open the viewer + manual editor: zoom & pan (mouse or pinch), rotate, flip, brightness/contrast/saturation/hue/blur/grayscale/invert sliders, freehand drawing with color + size, undo, reset, copy to clipboard and PNG export at full resolution.
-- **12 chat providers** — DeepSeek, Qwen, Claude, GPT, **Gemini (Google AI Studio)**, **Groq**, **GitHub Models**, **Mistral**, **Cerebras**, OpenRouter (free-tier models), zero-key **Pollinations** and an offline **Demo** model. Nine of them have free tiers.
+- **16 chat providers** — DeepSeek, Qwen, Claude, GPT, **Gemini (Google AI Studio)**, **Groq**, **GitHub Models**, **Mistral**, **Cerebras**, **NVIDIA NIM**, **Cohere**, **Hugging Face**, **Z.ai GLM**, OpenRouter (free-tier models), zero-key **Pollinations** and an offline **Demo** model. Eleven of them have free tiers — no credit card.
 - **Live code preview** — every HTML/CSS/JS code block gets a **Preview** button (sandboxed iframe + captured console), plus a full **Canvas** editor with live preview.
 - **OLED-black professional UI** — pure `#000`, Inter + Space Grotesk typography, 5 refined accent themes, multiple views (Chat / Agents / Canvas / Keys & Models).
 - **Phone-friendly** — mobile-first responsive layout: drawer navigation, bottom-sheet model picker, fullscreen agent pipeline, Code/Preview pane switch on Canvas, safe-area support and touch-sized targets.
@@ -52,7 +64,7 @@ npm run dev       # API server on :8787 + Vite on :5173
 Smoke-test the multi-agent engine (server must be running):
 
 ```bash
-npm test          # solo stream, full team run, degradation, abort & automatic failover
+npm test          # solo, team run, degradation, abort, failover, project pipeline & upgrade
 ```
 
 ## 🔑 API keys (all optional)
@@ -66,14 +78,18 @@ npm test          # solo stream, full team run, degradation, abort & automatic f
 | **OpenRouter** | [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys) | Free-tier DeepSeek, Qwen3, Llama, GPT-OSS + paid Claude/GPT/DeepSeek with one key |
 | **Mistral** | [console.mistral.ai](https://console.mistral.ai/api-keys) | Free tier (phone verification): Mistral Small |
 | **Cerebras** | [cloud.cerebras.ai](https://cloud.cerebras.ai/) | Free daily quota, wafer-scale speed: Llama 3.3 70B, GPT-OSS |
+| **NVIDIA NIM** | [build.nvidia.com](https://build.nvidia.com/) | Free monthly credits, no card — 100+ open models: GPT-OSS 120B, Llama 3.3 70B, Qwen 2.5 Coder, Nemotron |
+| **Cohere** | [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) | Trial key (no expiry, no card): Command A+ / A / Reasoning / R7B — 20 RPM, 1,000 calls/month |
+| **Hugging Face** | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) | One token, 200+ open models via the Inference Providers router (needs "Make calls to Inference Providers" permission; free monthly credits) |
+| **Z.ai · GLM** | [z.ai](https://z.ai/manage-apikey/apikey-list) | GLM-4.7-Flash (200K) & GLM-4.5-Flash are completely free — strong at coding & agents |
 | **DeepSeek** | [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) | deepseek-chat (V3), deepseek-reasoner (R1) — very cheap |
 | **Qwen / Alibaba** | [Model Studio](https://modelstudio.console.alibabacloud.com/) | qwen3-max, qwen-plus, qwen3-coder-plus (intl endpoint) |
 | **Claude / Anthropic** | [console.anthropic.com](https://console.anthropic.com/settings/keys) | claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5 |
 | **ChatGPT / OpenAI** | [platform.openai.com](https://platform.openai.com/api-keys) | gpt-4o, gpt-4.1 + DALL·E 3 / GPT-Image 1 |
 
-Add keys in **Keys & Models** inside the app (stored in your browser), or set them as env vars on the server: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `GITHUB_MODELS_TOKEN`, `MISTRAL_API_KEY`, `CEREBRAS_API_KEY`.
+Add keys in **Keys & Models** inside the app (stored in your browser), or set them as env vars on the server: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `GITHUB_MODELS_TOKEN`, `MISTRAL_API_KEY`, `CEREBRAS_API_KEY`, `NVIDIA_API_KEY`, `COHERE_API_KEY`, `HF_TOKEN`, `ZAI_API_KEY`.
 
-**Transports** — AUTO calls providers directly from your browser when they allow it (Pollinations, OpenRouter, Claude, Gemini) and uses the local proxy for OpenAI/DeepSeek/Qwen/Groq/GitHub/Mistral/Cerebras. You can force `DIRECT` or `PROXY` in Keys & Models → Connection.
+**Transports** — AUTO calls providers directly from your browser when they allow it (Pollinations, OpenRouter, Claude, Gemini) and uses the local proxy for OpenAI/DeepSeek/Qwen/Groq/GitHub/Mistral/Cerebras/NVIDIA/Cohere/Hugging Face/Z.ai. You can force `DIRECT` or `PROXY` in Keys & Models → Connection.
 
 ## 🧠 How the team works
 
@@ -87,12 +103,12 @@ Failures degrade gracefully: dead agents are retried on fallback models, a dead 
 ## 🗂 Project layout
 
 ```
-shared/providers.js   Provider registry — 12 chat providers + image providers (client+server)
+shared/providers.js   Provider registry — 16 chat providers (11 free paths) + image providers (client+server)
 server/index.js       Express: static hosting + /api proxy + health
 server/demo.js        Offline demo model (test everything with zero setup)
 src/lib/ai.js         Transport layer: direct-browser ⇄ proxy, SSE parsing
 src/lib/engine.js     Multi-agent orchestrator with automatic failover
-src/lib/projects.js   Project pipeline: Coordinator → Designer/Coder → Tester → Debugger → Docs → Report + upgrade loop (re-plan → re-build → re-test → changelog)
+src/lib/projects.js   Project pipeline: Coordinator → Designer/Coder → Tester → Verifier → Debugger → re-test → Docs → Report + upgrade loop (each agent: own prompt + tools; chat transcript)
 src/lib/zip.js        Zero-dependency ZIP writer (project export)
 src/lib/images.js     Image generation (Pollinations + OpenAI images)
 src/lib/preview.js    Sandboxed live-preview builder + console capture

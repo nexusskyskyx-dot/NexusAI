@@ -5,7 +5,7 @@ import { renderMarkdown } from '@lib/markdown.js';
 import { assemblePreview, PROJECT_STAGES, ROLE_META } from '@lib/projects.js';
 import { makeZip } from '@lib/zip.js';
 import hljs from 'highlight.js/lib/common';
-import { IconFolder, IconRocket, IconPlus, IconTrash, IconDownload, IconExternal, IconRefresh, IconCopy, IconCheck, IconTerminal, IconStop, IconSend, IconMonitor } from './Icons.jsx';
+import { IconFolder, IconRocket, IconPlus, IconTrash, IconDownload, IconExternal, IconRefresh, IconCopy, IconCheck, IconTerminal, IconStop, IconSend, IconChat } from './Icons.jsx';
 
 const IDEAS = [
   { title: 'Neon pomodoro timer', sub: 'focus timer with sessions', idea: 'A neon OLED-dark pomodoro timer web app with work/break sessions, a big circular countdown, session counter and keyboard shortcuts.' },
@@ -77,7 +77,7 @@ function TreeNode({ node, selected, onSelect, depth = 0 }) {
       ))}
       {files.map((f) => (
         <button key={f.path} className={`ftree-file ${selected === f.path ? 'sel' : ''} st-${f.status}`} style={{ paddingLeft: depth * 12 + 10 }} onClick={() => onSelect(f.path)} title={f.path}>
-          <span className="ftree-file-name">{f.path.split('/').pop()}</span>
+          <span className="ftree-file-name">{f.path.split('/').pop()}{f.touched ? <em className="ftree-v">✨v{f.touched}</em> : null}</span>
           <span className="ftree-file-size">{f.status === 'writing' ? 'writing…' : f.status === 'error' ? 'failed' : fmtBytes(f.bytes)}</span>
         </button>
       ))}
@@ -85,8 +85,8 @@ function TreeNode({ node, selected, onSelect, depth = 0 }) {
   );
 }
 
-// ── wizard (the FRIEND) ──────────────────────────────────────────────────────
-function Wizard() {
+// ── start screen (before any project exists) ─────────────────────────────────
+function StartScreen() {
   const s = useStore();
   const [offset, setOffset] = useState(() => Math.floor(Math.random() * IDEAS.length));
   const [own, setOwn] = useState('');
@@ -105,8 +105,9 @@ function Wizard() {
         <div>
           <div className="prj-friend-name">Friend</div>
           <p>
-            Hey! I'm <b>Friend</b>. Tell the team what to build — a Coordinator plans it, then Designer, Coder, Tester, Debugger,
-            Documenter and Optimizer deliver it live. Afterward you can ask for any upgrade, as many times as you want.
+            Hey! I'm <b>Friend</b>. Tell the team what to build — the <b>Coordinator</b> plans it, <b>Designer</b> & <b>Coder</b> write the files,
+            <b> Tester</b> hunts bugs, the <b>Verifier</b> double-checks them, the <b>Debugger</b> patches what's confirmed, then <b>Documenter</b> and <b>Optimizer</b> ship it.
+            You watch everything live in the chat, and afterward you can ask for any upgrade — as many times as you want.
           </p>
         </div>
       </div>
@@ -174,10 +175,187 @@ function Wizard() {
   );
 }
 
-// ── compact progress line ────────────────────────────────────────────────────
+// ── chat section ─────────────────────────────────────────────────────────────
+function ChatMsg({ m }) {
+  if (m.kind === 'user') {
+    return (
+      <div className="pc-msg user">
+        <div className="pc-bubble">{m.text}</div>
+      </div>
+    );
+  }
+  if (m.kind === 'sys') {
+    return <div className="pc-msg sys"><span>{m.text}</span></div>;
+  }
+  const meta = ROLE_META[m.role] || { glyph: '◆', name: m.role };
+  return (
+    <div className={`pc-msg agent ${m.error ? 'err' : ''}`}>
+      <span className="pc-avatar">{meta.glyph}</span>
+      <div className="pc-body">
+        <div className="pc-name">
+          {meta.name}
+          {m.done ? null : (
+            <span className="pc-working">
+              <span className="led" /> working
+            </span>
+          )}
+        </div>
+        <div className="pc-text">{m.text}</div>
+        {m.bugs?.length ? (
+          <ul className="pc-bugs">
+            {m.bugs.map((b, i) => (
+              <li key={i}>
+                <code>{b.file}{b.line ? ':' + b.line : ''}</code> — {b.issue}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {m.results?.length ? (
+          <ul className="pc-results">
+            {m.results.map((r, i) => (
+              <li key={i} className={r.confirmed ? 'ok' : 'no'}>
+                <span className="pc-verdict">{r.confirmed ? '✓ confirmed' : '✕ dismissed'}</span>
+                <code>{r.file}{r.line ? ':' + r.line : ''}</code>
+                {r.reason ? <em>{r.reason}</em> : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {m.md ? <div className="md pc-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.md) }} /> : null}
+        {m.tools?.length ? (
+          <div className="pc-tools">
+            {m.tools.map((t) => (
+              <span key={t} className="pc-tool">
+                {t}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ChatPane({ project, pane }) {
+  const s = useStore();
+  const [text, setText] = useState('');
+  const taRef = useRef(null);
+  const scrollRef = useRef(null);
+  const files = project.files || [];
+  const busy = s.projectBusy && !['done', 'error', 'stopped'].includes(project.status);
+  const chat = project.chat || [];
+
+  // autoscroll as the story unfolds
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat.length, chat[chat.length - 1]?.text]);
+
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  }, [text]);
+
+  const placeholder = busy
+    ? 'The team is working…'
+    : files.length
+    ? 'Ask for any change — add a feature, restyle it, fix something…'
+    : 'Describe what you want to build…';
+
+  const send = () => {
+    const t = text.trim();
+    if (!t || s.projectBusy) return;
+    setText('');
+    if (files.length) actions.upgradeProject(t);
+    else actions.startProject(t);
+  };
+
+  const running = project.agents?.find((a) => a.status === 'running');
+  const writing = files.find((f) => f.status === 'writing');
+  const activity = project.upgradeNote || (running ? `${running.name} is working…` : writing ? `Writing ${writing.path}…` : 'Coordinator is planning…');
+
+  return (
+    <section className={`pchat ${pane !== 'chat' ? 'pane-off' : ''}`}>
+      <div className="pchat-head">
+        <IconChat size={14} />
+        <span>Project chat</span>
+        <span className="pchat-model">{project.model}</span>
+      </div>
+
+      <div className="pchat-scroll" ref={scrollRef}>
+        {chat.length ? (
+          chat.map((m) => <ChatMsg key={m.id} m={m} />)
+        ) : (
+          <div className="pchat-empty">
+            <span className="prj-friend-avatar">👋</span>
+            <p>This project was built before team chat existed. Ask for an upgrade below and the whole conversation will appear here.</p>
+          </div>
+        )}
+      </div>
+
+      <footer className="pchat-composer">
+        {busy ? (
+          <div className="pchat-activity">
+            <span className="typing">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            <span className="pchat-activity-text">{activity}</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => actions.stopProject()}>
+              Stop
+            </button>
+          </div>
+        ) : (
+          files.length > 0 && (
+            <div className="pchat-chips">
+              {UPGRADE_CHIPS.map((c) => (
+                <button key={c} className="pc-chip" onClick={() => actions.upgradeProject(c.replace(/^[^\w]+ /, ''))} disabled={s.projectBusy}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          )
+        )}
+        <div className="pchat-row">
+          <span className="pchat-picker">
+            <ModelPicker value={s.prj} onChange={(v) => actions.setPrjModel(v)} />
+          </span>
+          <textarea
+            ref={taRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            rows={1}
+            placeholder={placeholder}
+            disabled={s.projectBusy}
+          />
+          {busy ? (
+            <button className="btn-send" onClick={() => actions.stopProject()} title="Stop the team" aria-label="Stop the team">
+              <IconStop size={15} />
+            </button>
+          ) : (
+            <button className="btn-send" onClick={send} disabled={!text.trim()} title={files.length ? 'Upgrade the project' : 'Start building'} aria-label={files.length ? 'Upgrade the project' : 'Start building'}>
+              <IconSend size={15} />
+            </button>
+          )}
+        </div>
+      </footer>
+    </section>
+  );
+}
+
+// ── thin progress line ───────────────────────────────────────────────────────
 function Progress({ project }) {
   const stages = new Set(project.stages || []);
-  const map = { planning: 'plan', building: 'build', testing: 'test', debugging: 'debug', documenting: 'docs', reporting: 'report' };
+  const map = { planning: 'plan', building: 'build', testing: 'test', verifying: 'verify', debugging: 'debug', retesting: 'retest', documenting: 'docs', reporting: 'report' };
   const activeId = project.status === 'upgrading' ? null : map[project.status];
   const finished = project.status === 'done';
   return (
@@ -204,9 +382,9 @@ function Progress({ project }) {
   );
 }
 
-// ── agents (tab) ─────────────────────────────────────────────────────────────
+// ── agents feed (Team tab) ───────────────────────────────────────────────────
 function AgentsList({ agents }) {
-  if (!agents?.length) return <div className="prj-pass">Agents will appear here while the team works.</div>;
+  if (!agents?.length) return <div className="prj-pass">No agent has run in this session yet.</div>;
   return (
     <div className="prj-agents">
       {agents.map((a) => (
@@ -231,19 +409,15 @@ function AgentsList({ agents }) {
   );
 }
 
-// ── project room ─────────────────────────────────────────────────────────────
-function ProjectRoom({ project }) {
+// ── view project section ─────────────────────────────────────────────────────
+function ViewPane({ project, pane }) {
   const s = useStore();
   const [selected, setSelected] = useState(null);
-  const [pane, setPane] = useState('preview'); // mobile tabs
-  const [tab, setTab] = useState('preview'); // right panel tabs: preview | report | agents
+  const [tab, setTab] = useState('preview');
   const [logs, setLogs] = useState([]);
   const [showConsole, setShowConsole] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [upgradeText, setUpgradeText] = useState('');
   const logRef = useRef(null);
-  const taRef = useRef(null);
-  const prevStatus = useRef(project.status);
 
   const files = project.files || [];
   const busy = s.projectBusy && !['done', 'error', 'stopped'].includes(project.status);
@@ -256,14 +430,6 @@ function ProjectRoom({ project }) {
     }
   }, [files, selected]);
 
-  // switch to the report tab when the initial build completes
-  useEffect(() => {
-    if (prevStatus.current !== 'done' && project.status === 'done') {
-      setTab((t) => (t === 'preview' ? 'report' : t));
-    }
-    prevStatus.current = project.status;
-  }, [project.status]);
-
   // console messages from the preview iframe
   useEffect(() => {
     const h = (e) => {
@@ -275,13 +441,6 @@ function ProjectRoom({ project }) {
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
-
-  useEffect(() => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
-  }, [upgradeText]);
 
   const previewKey = files.map((f) => f.path + ':' + f.status + ':' + f.bytes).join('|');
   const srcDoc = useMemo(() => assemblePreview(files), [previewKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -313,260 +472,228 @@ function ProjectRoom({ project }) {
     } catch {}
   };
 
-  const sendUpgrade = () => {
-    if (!upgradeText.trim() || s.projectBusy) return;
-    actions.upgradeProject(upgradeText);
-    setUpgradeText('');
-  };
-
-  // current activity line while busy
-  const running = project.agents?.find((a) => a.status === 'running');
-  const writing = files.find((f) => f.status === 'writing');
-  const activity = busy
-    ? project.upgradeNote ||
-      (running ? `${ROLE_META[running.role]?.glyph || '◆'} ${running.name} is working…` : writing ? `✍️ Writing ${writing.path}…` : '🧠 Coordinator is planning…')
-    : null;
-
   const changelog = [...(project.changelog || [])].reverse();
+  const tr = project.testReport;
 
   return (
-    <div className="prj-room">
-      <header className="prj-head">
-        <div className="prj-head-title">
+    <section className={`pview ${pane !== 'view' ? 'pane-off' : ''}`}>
+      <header className="pv-head">
+        <div className="pv-title">
           <h1>
             {project.title || 'Building…'} <span className={`prj-ver ${project.status === 'upgrading' ? 'up' : ''}`}>v{project.version || 1}</span>
           </h1>
           <p>{project.description || project.idea?.slice(0, 120)}</p>
         </div>
-        <div className="prj-head-actions">
+        <div className="pv-actions">
           {busy ? (
-            <button className="icon-btn prj-act" onClick={() => actions.stopProject()} title="Stop">
-              <IconStop size={16} />
+            <button className="icon-btn" onClick={() => actions.stopProject()} title="Stop">
+              <IconStop size={15} />
             </button>
           ) : (
-            <button className="icon-btn prj-act" onClick={() => actions.startProject(project.idea)} title="Rebuild from scratch">
-              <IconRefresh size={16} />
+            <button className="icon-btn" onClick={() => actions.startProject(project.idea)} title="Rebuild from scratch">
+              <IconRefresh size={15} />
             </button>
           )}
-          <button className="icon-btn prj-act" onClick={openFull} disabled={!files.length} title="Fullscreen preview">
-            <IconExternal size={16} />
-          </button>
-          <button className="icon-btn prj-act" onClick={() => setPane('preview') || setTab('preview')} title="Preview">
-            <IconMonitor size={16} />
+          <button className="icon-btn" onClick={openFull} disabled={!files.length} title="Fullscreen preview">
+            <IconExternal size={15} />
           </button>
           <button className="btn btn-acc btn-sm" onClick={downloadZip} disabled={!files.some((f) => f.content)} title="Download ZIP">
             <IconDownload size={13} /> ZIP
           </button>
-          <button className="icon-btn prj-act" onClick={() => actions.openProjectWizard()} title="New project">
-            <IconPlus size={16} />
+          <button className="icon-btn" onClick={() => actions.openProjectWizard()} title="New project">
+            <IconPlus size={15} />
           </button>
         </div>
       </header>
 
       <Progress project={project} />
 
-      <div className="prj-body">
-        {/* explorer */}
-        <aside className={`prj-explorer ${pane !== 'files' ? 'pane-off' : ''}`}>
-          <div className="prj-explorer-head">
-            Files
-            <span className="prj-explorer-meta">
-              {files.length} files · {folderCount} folder{folderCount === 1 ? '' : 's'} · {fmtBytes(totalBytes)}
-            </span>
-          </div>
-          <div className="ftree">
-            {files.length ? (
-              <TreeNode node={treeOf(files)} selected={selected} onSelect={(p) => { setSelected(p); setPane('code'); }} />
-            ) : (
-              <div className="ftree-empty">
-                <span className="shimmer" />
-                The Coordinator is planning the file structure…
-              </div>
-            )}
-          </div>
-        </aside>
-
-        {/* code viewer */}
-        <section className={`prj-code ${pane !== 'code' ? 'pane-off' : ''}`}>
-          {file ? (
-            <>
-              <div className="prj-code-head">
-                <span className="prj-code-path">{file.path}</span>
-                <span className="prj-code-meta">
-                  {file.content ? file.content.split('\n').length : 0} lines · {fmtBytes(file.bytes)}
-                  {file.touched ? ' · ✨ v' + file.touched : ''}
-                  {file.status === 'patched' ? ' · 🔧 patched' : ''}
-                </span>
-                <button className="icon-btn" onClick={copyFile} title="Copy file">
-                  {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
-                </button>
-              </div>
-              <pre className="prj-code-pre">
-                <code className="hljs" dangerouslySetInnerHTML={{ __html: highlightFile(file.path, file.content || '') }} />
-              </pre>
-            </>
-          ) : (
-            <div className="prj-code-empty">Select a file to view its code.</div>
-          )}
-        </section>
-
-        {/* right panel — tabbed, uncluttered */}
-        <section className={`prj-right ${pane !== 'preview' ? 'pane-off' : ''}`}>
-          <div className="prj-tabs" role="tablist">
-            <button className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>
-              Preview
-            </button>
-            <button className={tab === 'report' ? 'on' : ''} onClick={() => setTab('report')}>
-              Report{project.status === 'done' && !project.report && !changelog.length ? '' : ''}
-            </button>
-            <button className={tab === 'agents' ? 'on' : ''} onClick={() => setTab('agents')}>
-              Agents{project.agents?.length ? ` (${project.agents.filter((a) => a.status === 'running').length || project.agents.length})` : ''}
-            </button>
-          </div>
-
-          <div className="prj-tabbody">
-            {tab === 'preview' && (
-              <div className="prj-previewfill">
-                <div className="prj-preview-head">
-                  <span className="led" /> Live
-                  <button className="icon-btn" onClick={() => setShowConsole((x) => !x)} title="Toggle console">
-                    <IconTerminal size={13} /> {logs.length ? `(${logs.length})` : ''}
-                  </button>
-                </div>
-                <iframe key={previewKey} title="project preview" sandbox="allow-scripts allow-modals allow-forms allow-popups" srcDoc={srcDoc} />
-                {showConsole && (
-                  <div className="prj-console" ref={logRef}>
-                    {logs.length === 0 && <div className="pconsole-line dim">— console output from the preview appears here —</div>}
-                    {logs.map((l, i) => (
-                      <div key={i} className={`pconsole-line ${l.level}`}>
-                        <span className="pconsole-level">{l.level.toUpperCase()}</span> {l.text}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {tab === 'report' && (
-              <div className="prj-reportbody">
-                {busy && project.upgradeNote ? <div className="prj-upnote">{project.upgradeNote}</div> : null}
-
-                {changelog.length > 0 && (
-                  <div className="prj-card">
-                    <div className="prj-card-head">Upgrades</div>
-                    {changelog.map((c) => (
-                      <div key={c.version} className="prj-chlog">
-                        <div className="prj-chlog-head">
-                          <span className="prj-chlog-ver">v{c.version}</span>
-                          <span className="prj-chlog-req">“{c.request}”</span>
-                        </div>
-                        <div className="md prj-report" dangerouslySetInnerHTML={{ __html: renderMarkdown(c.summary || '') }} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {project.testReport ? (
-                  <div className="prj-card">
-                    <div className="prj-card-head">Test report</div>
-                    {project.testReport.bugs?.length ? (
-                      <>
-                        <ul className="prj-bugs">
-                          {project.testReport.bugs.map((b, i) => (
-                            <li key={i}>
-                              <b>{b.file}</b> — {b.issue}
-                              {b.fix ? <span className="prj-bug-fix">→ {b.fix}</span> : null}
-                            </li>
-                          ))}
-                        </ul>
-                        {project.testReport.applied ? (
-                          <div className="prj-bugs-applied">🔧 Debugger patched {project.testReport.applied} file{project.testReport.applied > 1 ? 's' : ''}</div>
-                        ) : (
-                          <div className="prj-bugs-pending">🔧 Debugger is on it…</div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="prj-pass">✓ All checks passed — no bugs found.</div>
-                    )}
-                  </div>
-                ) : null}
-
-                {project.report ? (
-                  <div className="prj-card">
-                    <div className="prj-card-head">Final report</div>
-                    <div className="md prj-report" dangerouslySetInnerHTML={{ __html: renderMarkdown(project.report) }} />
-                  </div>
-                ) : !changelog.length ? (
-                  <div className="prj-pass">The report appears here when the team finishes.</div>
-                ) : null}
-
-                {project.error ? <div className="msg-error">⚠ {project.error}</div> : null}
-                {project.status === 'stopped' ? <div className="msg-aborted">Stopped by user</div> : null}
-              </div>
-            )}
-
-            {tab === 'agents' && (
-              <div className="prj-reportbody">
-                <AgentsList agents={project.agents} />
-              </div>
-            )}
-          </div>
-        </section>
+      <div className="pv-tabs" role="tablist">
+        <button className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>
+          Preview
+        </button>
+        <button className={tab === 'files' ? 'on' : ''} onClick={() => setTab('files')}>
+          Files{files.length ? ` (${files.length})` : ''}
+        </button>
+        <button className={tab === 'report' ? 'on' : ''} onClick={() => setTab('report')}>
+          Report
+        </button>
+        <button className={tab === 'team' ? 'on' : ''} onClick={() => setTab('team')}>
+          Team
+        </button>
       </div>
 
-      {/* upgrade footer */}
-      <footer className="prj-upgrade">
-        {busy ? (
-          <div className="prj-upstatus">
-            <span className="typing">
-              <i></i>
-              <i></i>
-              <i></i>
-            </span>
-            <span className="prj-upstatus-text">{activity || 'Working…'}</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => actions.stopProject()}>
-              Stop
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="prj-chips">
-              {UPGRADE_CHIPS.map((c) => (
-                <button key={c} className="prj-chip" onClick={() => actions.upgradeProject(c.replace(/^[^\w]+ /, ''))} disabled={s.projectBusy || !files.length}>
-                  {c}
-                </button>
-              ))}
-            </div>
-            <div className="prj-uprow">
-              <textarea
-                ref={taRef}
-                value={upgradeText}
-                onChange={(e) => setUpgradeText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendUpgrade();
-                  }
-                }}
-                rows={1}
-                placeholder="Ask for any change — add a feature, restyle it, fix something… (Enter to upgrade)"
-                disabled={s.projectBusy || !files.length}
-              />
-              <button className="btn-send" onClick={sendUpgrade} disabled={!upgradeText.trim() || s.projectBusy} title="Upgrade the project" aria-label="Upgrade the project">
-                <IconSend size={16} />
+      <div className="pv-body">
+        {tab === 'preview' && (
+          <div className="pv-preview">
+            <div className="pv-preview-head">
+              <span className="led" /> Live
+              <span className="pv-preview-note">{files.length ? `${files.length} files assembled` : 'waiting for files…'}</span>
+              <button className="icon-btn" onClick={() => setShowConsole((x) => !x)} title="Toggle console">
+                <IconTerminal size={13} /> {logs.length ? `(${logs.length})` : ''}
               </button>
             </div>
-          </>
+            <iframe key={previewKey} title="project preview" sandbox="allow-scripts allow-modals allow-forms allow-popups" srcDoc={srcDoc} />
+            {showConsole && (
+              <div className="prj-console" ref={logRef}>
+                {logs.length === 0 && <div className="pconsole-line dim">— console output from the preview appears here —</div>}
+                {logs.map((l, i) => (
+                  <div key={i} className={`pconsole-line ${l.level}`}>
+                    <span className="pconsole-level">{l.level.toUpperCase()}</span> {l.text}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
-      </footer>
 
-      {/* mobile pane switch */}
+        {tab === 'files' && (
+          <div className="pv-files">
+            <aside className="pv-tree">
+              <div className="pv-tree-head">
+                Files
+                <span className="pv-tree-meta">
+                  {files.length} · {folderCount} folder{folderCount === 1 ? '' : 's'} · {fmtBytes(totalBytes)}
+                </span>
+              </div>
+              <div className="ftree">
+                {files.length ? (
+                  <TreeNode node={treeOf(files)} selected={selected} onSelect={setSelected} />
+                ) : (
+                  <div className="ftree-empty">
+                    <span className="shimmer" />
+                    The Coordinator is planning the file structure…
+                  </div>
+                )}
+              </div>
+            </aside>
+            <section className="pv-code">
+              {file ? (
+                <>
+                  <div className="pv-code-head">
+                    <span className="pv-code-path">{file.path}</span>
+                    <span className="pv-code-meta">
+                      {file.content ? file.content.split('\n').length : 0} lines · {fmtBytes(file.bytes)}
+                      {file.touched ? ' · ✨ v' + file.touched : ''}
+                      {file.status === 'patched' ? ' · 🔧 patched' : ''}
+                    </span>
+                    <button className="icon-btn" onClick={copyFile} title="Copy file">
+                      {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                    </button>
+                  </div>
+                  <pre className="pv-code-pre">
+                    <code className="hljs" dangerouslySetInnerHTML={{ __html: highlightFile(file.path, file.content || '') }} />
+                  </pre>
+                </>
+              ) : (
+                <div className="pv-code-empty">Select a file to view its code.</div>
+              )}
+            </section>
+          </div>
+        )}
+
+        {tab === 'report' && (
+          <div className="pv-report">
+            {changelog.length > 0 && (
+              <div className="prj-card">
+                <div className="prj-card-head">Upgrades</div>
+                {changelog.map((c) => (
+                  <div key={c.version} className="prj-chlog">
+                    <div className="prj-chlog-head">
+                      <span className="prj-chlog-ver">v{c.version}</span>
+                      <span className="prj-chlog-req">“{c.request}”</span>
+                    </div>
+                    <div className="md prj-report" dangerouslySetInnerHTML={{ __html: renderMarkdown(c.summary || '') }} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tr ? (
+              <div className="prj-card">
+                <div className="prj-card-head">Test report</div>
+                {tr.bugs?.length ? (
+                  <>
+                    <ul className="prj-bugs">
+                      {tr.bugs.map((b, i) => (
+                        <li key={i} className={b.confirmed === false ? 'dismissed' : ''}>
+                          <b>{b.file}{b.line ? ':' + b.line : ''}</b> — {b.issue}
+                          {b.confirmed === false ? <span className="prj-bug-fix">→ false alarm ({b.reason || 'dismissed by Verifier'})</span> : b.fix ? <span className="prj-bug-fix">→ {b.fix}</span> : null}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="prj-verdicts">
+                      {tr.confirmed != null ? <span>🔬 Verifier confirmed {tr.confirmed}</span> : null}
+                      {tr.dismissed ? <span>· dismissed {tr.dismissed}</span> : null}
+                      {tr.applied ? <span>· 🔧 patched {tr.applied}</span> : null}
+                      {tr.retest === 'pass' ? <span>· ✅ re-test passed</span> : null}
+                    </div>
+                  </>
+                ) : (
+                  <div className="prj-pass">✓ All checks passed — no bugs found.</div>
+                )}
+              </div>
+            ) : null}
+
+            {project.report ? (
+              <div className="prj-card">
+                <div className="prj-card-head">Final report</div>
+                <div className="md prj-report" dangerouslySetInnerHTML={{ __html: renderMarkdown(project.report) }} />
+              </div>
+            ) : !changelog.length ? (
+              <div className="prj-pass">The report appears here when the team finishes.</div>
+            ) : null}
+
+            {project.error ? <div className="msg-error">⚠ {project.error}</div> : null}
+            {project.status === 'stopped' ? <div className="msg-aborted">Stopped by user</div> : null}
+          </div>
+        )}
+
+        {tab === 'team' && (
+          <div className="pv-team">
+            <div className="pv-roster">
+              {Object.entries(ROLE_META).map(([id, r]) => (
+                <div key={id} className="pv-member">
+                  <span className="pv-member-glyph">{r.glyph}</span>
+                  <div className="pv-member-body">
+                    <div className="pv-member-name">{r.name}</div>
+                    <div className="pv-member-job">{r.job}</div>
+                    <div className="pv-member-tools">
+                      {r.tools.map((t) => (
+                        <span key={t} className="pc-tool">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="prj-card">
+              <div className="prj-card-head">This session</div>
+              <AgentsList agents={project.agents} />
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ── the room: CHAT (left) + VIEW PROJECT (right) ─────────────────────────────
+function ProjectRoom({ project }) {
+  const [pane, setPane] = useState('chat');
+  return (
+    <div className="prj-room">
+      <ChatPane project={project} pane={pane} />
+      <ViewPane project={project} pane={pane} />
       <div className="prj-panes">
-        {['files', 'code', 'preview'].map((p) => (
-          <button key={p} className={pane === p ? 'on' : ''} onClick={() => setPane(p)}>
-            {p === 'files' ? `Files (${files.length})` : p === 'code' ? 'Code' : 'Preview'}
-          </button>
-        ))}
+        <button className={pane === 'chat' ? 'on' : ''} onClick={() => setPane('chat')}>
+          <IconChat size={13} /> Chat
+        </button>
+        <button className={pane === 'view' ? 'on' : ''} onClick={() => setPane('view')}>
+          View project
+        </button>
       </div>
     </div>
   );
@@ -575,5 +702,9 @@ function ProjectRoom({ project }) {
 export default function ProjectsView() {
   const s = useStore();
   const project = s.projects.find((p) => p.id === s.activeProjectId);
-  return <div className="page projectsview">{project ? <ProjectRoom project={project} /> : <Wizard />}</div>;
+  return (
+    <div className="page projectsview">
+      {project ? <ProjectRoom project={project} /> : <StartScreen />}
+    </div>
+  );
 }
