@@ -1171,3 +1171,203 @@ input[type='range'] { accent-color: var(--acc); width: 170px; }
   .pchat-picker { display: none; }
   .prj-progress { padding: 4px 12px 10px; }
 }
+
+/* ── v1.6 · professional polish — motion, phone fixes, micro-interactions ── */
+
+/* touch devices: hover-only reveals are invisible → always show them */
+@media (hover: none) {
+  .msg-user-actions { opacity: 1; }
+  .conv-del { opacity: 1; position: static; transform: none; margin-left: auto; }
+  .msg-user-actions .icon-btn, .conv-del { padding: 7px; }
+}
+
+/* theme-aware selection + focus rings */
+::selection { background: var(--acc-soft); color: var(--txt); }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 6px; }
+
+/* thin graphite scrollbars everywhere */
+* { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 8px; border: 2px solid var(--bg); }
+*::-webkit-scrollbar-thumb:hover { background: var(--txt3); }
+
+/* subtle ambient glow — accent-aware, graceful fallback */
+body {
+  background: #000;
+  background-image: radial-gradient(1100px 460px at 50% -12%, color-mix(in srgb, var(--acc) 7%, transparent), transparent 65%);
+  background-repeat: no-repeat;
+}
+
+/* view switch: every page enters with a soft rise */
+.page { animation: viewIn 0.28s cubic-bezier(0.22, 0.68, 0.32, 1); }
+@keyframes viewIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* global press feedback — every control answers the finger */
+.btn, .icon-btn, .btn-send, .pc-chip, .ftree-file, .mb-btn, .nav-item, .prj-prev-item,
+.prj-idea, .conv-item, .pv-tabs button, .prj-panes button, .accent-dot, .prj-chip {
+  transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
+}
+.btn:active, .icon-btn:active, .btn-send:active, .pc-chip:active, .ftree-file:active,
+.mb-btn:active, .nav-item:active, .prj-prev-item:active, .prj-idea:active, .pv-tabs button:active,
+.prj-panes button:active, .accent-dot:active { transform: scale(0.96); }
+.btn-acc:hover:not(:disabled) { box-shadow: 0 0 24px var(--acc-glow); }
+
+/* ── chat bubbles: soft pop-in ── */
+.msg-user-card { animation: bubbleIn 0.26s cubic-bezier(0.22, 0.68, 0.32, 1); }
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.pc-bubble { animation: bubbleIn 0.26s cubic-bezier(0.22, 0.68, 0.32, 1); }
+.pc-avatar { animation: avatarIn 0.3s cubic-bezier(0.34, 1.4, 0.44, 1); }
+@keyframes avatarIn {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+.msg-user-card:hover { border-color: color-mix(in srgb, var(--acc) 30%, var(--line2)); }
+
+/* hero: the logo breathes */
+.hero-logo { animation: breathe 5s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { filter: drop-shadow(0 0 18px var(--acc-glow)); }
+  50% { filter: drop-shadow(0 0 34px var(--acc-glow)); }
+}
+
+/* LED indicator: glow pulse */
+.led { box-shadow: 0 0 8px var(--acc-glow); }
+
+/* toasts: spring in, error tint */
+.toast { animation: toastIn 0.32s cubic-bezier(0.34, 1.3, 0.44, 1); border-left-width: 3px; }
+.toast.error { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 24px rgba(255, 84, 112, 0.12); }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* overlays: scale-in instead of plain fade */
+.pmodal, .istudio { animation: overlayIn 0.24s cubic-bezier(0.22, 0.68, 0.32, 1); }
+@keyframes overlayIn {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* sidebar drawer: spring slide (mobile) */
+@media (max-width: 900px) {
+  .sidebar { transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1); }
+  .backdrop { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); background: rgba(0, 0, 0, 0.55); animation: fadeIn 0.2s ease; }
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── view-project tabs: animated underline ── */
+.pv-tabs button { position: relative; }
+.pv-tabs button::after {
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px;
+  background: var(--acc); border-radius: 2px; transform: scaleX(0); transform-origin: left;
+  transition: transform 0.22s cubic-bezier(0.22, 0.68, 0.32, 1);
+}
+.pv-tabs button.on::after { transform: scaleX(1); }
+
+/* progress line: dots + links animate as they light up */
+.prj-pdot { transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease; }
+.prj-pstep.active .prj-pdot { box-shadow: 0 0 0 4px var(--acc-dim), 0 0 12px var(--acc-glow); }
+.prj-plink { transition: background 0.35s ease; }
+.prj-pstep { transition: opacity 0.2s ease; }
+
+/* file tree: files nudge right on hover (translate — padding is inline per depth) */
+.ftree-file { transition: background 0.12s ease, color 0.12s ease, transform 0.15s ease; }
+.ftree-file:hover { transform: translateX(2px); }
+
+/* chips: lift on hover */
+.pc-chip:hover { transform: translateY(-1px); color: var(--acc); border-color: color-mix(in srgb, var(--acc) 40%, var(--line)); background: var(--acc-dim); }
+
+/* tool chips: accent on hover */
+.pc-tool { transition: color 0.15s ease, border-color 0.15s ease; }
+.pc-tool:hover { color: var(--acc); border-color: var(--line2); }
+
+/* team chip in the composer (was unstyled) */
+.model-chip.team-chip {
+  background: linear-gradient(160deg, rgba(167, 139, 250, 0.12), rgba(77, 163, 255, 0.08));
+  border-color: rgba(167, 139, 250, 0.35); color: #c4b5fd;
+}
+.model-chip.team-chip:hover { border-color: rgba(167, 139, 250, 0.6); box-shadow: 0 0 18px rgba(167, 139, 250, 0.18); }
+
+/* version pill: pop when it bumps */
+.prj-ver { animation: pillIn 0.35s cubic-bezier(0.34, 1.4, 0.44, 1); }
+@keyframes pillIn {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* iframe preview: settle-in */
+.pv-preview iframe { animation: viewIn 0.3s ease; }
+
+/* agent cards: status color transitions */
+.prj-agent { transition: border-color 0.25s ease, background 0.25s ease; }
+
+/* ── phones: refined segmented pane switcher + safe areas ── */
+@media (max-width: 760px) {
+  .mobilebar {
+    padding-top: env(safe-area-inset-top, 0px);
+    height: calc(54px + env(safe-area-inset-top, 0px));
+  }
+  .mb-brand { margin: 0; }
+  .mb-view {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+    font: 700 10.5px var(--font-d); letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--txt3); background: var(--bg2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 11px; margin-right: 4px; white-space: nowrap;
+    animation: viewIn 0.25s ease;
+  }
+  .mb-view .mb-live { background: var(--acc); width: 6px; height: 6px; }
+  .prj-panes {
+    margin: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    border: 1px solid var(--line2); border-radius: 13px; background: var(--bg1);
+    padding: 3px; gap: 3px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+  }
+  .prj-panes button {
+    border-radius: 10px; padding: 10px 0; color: var(--txt3);
+    transition: background 0.18s ease, color 0.18s ease, transform 0.12s ease;
+  }
+  .prj-panes button.on {
+    background: var(--acc-dim); color: var(--acc);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc) 35%, transparent);
+  }
+  .pchat-composer { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .pchat-row textarea { font-size: 16px; }
+  .pv-code-pre code { font-size: 11px; }
+  /* room fills the screen under the mobile bar */
+  .projectsview { min-height: 0; }
+}
+
+/* bigger phone target areas */
+@media (max-width: 760px) {
+  .icon-btn { min-width: 38px; min-height: 38px; }
+  .ftree-file { padding-top: 8px; padding-bottom: 8px; }
+  .pv-tabs button { padding: 11px 13px; }
+}
+
+/* accessibility: honor reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* model picker bottom sheet: slide up with a drag handle */
+@media (max-width: 760px) {
+  .mpop-body { animation: sheetUp 0.3s cubic-bezier(0.22, 0.68, 0.32, 1); }
+  .mpop-body::before {
+    content: ''; position: absolute; top: 7px; left: 50%; transform: translateX(-50%);
+    width: 38px; height: 4px; border-radius: 4px; background: var(--line2);
+  }
+}
+@keyframes sheetUp {
+  from { transform: translateY(40px); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}

@@ -12,6 +12,19 @@ export default function PreviewModal() {
   const frameRef = useRef(null);
   const logRef = useRef(null);
 
+  // global Escape chain support (App dispatches 'nexus-escape')
+  useEffect(() => {
+    window.__nexusPreview = !!req;
+    return () => {
+      window.__nexusPreview = false;
+    };
+  }, [req]);
+  useEffect(() => {
+    const h = () => setReq(null);
+    window.addEventListener('nexus-escape', h);
+    return () => window.removeEventListener('nexus-escape', h);
+  }, []);
+
   useEffect(() => {
     const h = (e) => {
       const d = e.detail || {};

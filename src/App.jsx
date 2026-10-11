@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useStore, actions } from './store.js';
 import Sidebar from '@components/Sidebar.jsx';
 import ChatView from '@components/ChatView.jsx';
@@ -25,15 +25,27 @@ function Toasts() {
 
 export default function App() {
   const s = useStore();
+  const sRef = useRef(s);
+  sRef.current = s;
 
   useEffect(() => {
     actions.boot();
     document.documentElement.dataset.acc = s.settings.accent || 'green';
   }, []);
 
+  // Escape closes things in priority order:
+  // preview modal → image studio → sidebar drawer → agents panel
   useEffect(() => {
     const h = (e) => {
-      if (e.key === 'Escape') actions.setAgentsOpen(false);
+      if (e.key !== 'Escape') return;
+      const previewOpen = !!window.__nexusPreview;
+      window.dispatchEvent(new CustomEvent('nexus-escape'));
+      if (previewOpen || sRef.current.studio) return; // overlays eat this Escape
+      if (sRef.current.sidebarOpen) {
+        actions.setSidebarOpen(false);
+        return;
+      }
+      if (sRef.current.agentsOpen) actions.setAgentsOpen(false);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
