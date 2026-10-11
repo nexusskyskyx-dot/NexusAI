@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useStore, actions, hasCredential } from '../store.js';
-import { PROVIDERS } from '@shared/providers.js';
+import { PROVIDERS, IMAGE_PROVIDERS } from '@shared/providers.js';
 import { completeChat } from '@lib/ai.js';
-import { IconKeys, IconShield, IconExternal, IconEye, IconEyeOff, IconCheck, IconBolt, IconSettings } from './Icons.jsx';
+import { IconKeys, IconShield, IconExternal, IconEye, IconEyeOff, IconCheck, IconBolt, IconSettings, IconImage } from './Icons.jsx';
 
 function ProviderCard({ p }) {
   const s = useStore();
@@ -128,7 +128,7 @@ export default function KeysView() {
       <div className="security-note">
         <IconShield size={16} />
         <div>
-          <b>Zero-server-key architecture.</b> Keys are stored in your browser's localStorage, sent per-request either <b>directly to the provider</b> (Pollinations / OpenRouter / Claude) or through your local NexusAI proxy (OpenAI / DeepSeek / Qwen) — never persisted server-side. Running your own server? You can also set <code>OPENROUTER_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, <code>DEEPSEEK_API_KEY</code>, <code>DASHSCOPE_API_KEY</code> as environment variables instead.
+          <b>Zero-server-key architecture.</b> Keys are stored in your browser's localStorage, sent per-request either <b>directly to the provider</b> (Pollinations / OpenRouter / Claude) or through your local NexusAI proxy (OpenAI / DeepSeek / Qwen) — never persisted server-side. Running your own server? You can also set <code>OPENROUTER_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, <code>DEEPSEEK_API_KEY</code>, <code>DASHSCOPE_API_KEY</code>, <code>GROQ_API_KEY</code>, <code>GEMINI_API_KEY</code>, <code>GITHUB_MODELS_TOKEN</code>, <code>MISTRAL_API_KEY</code>, <code>CEREBRAS_API_KEY</code> as environment variables instead.
         </div>
       </div>
 
@@ -178,6 +178,52 @@ export default function KeysView() {
           <ProviderCard key={p.id} p={p} />
         ))}
       </div>
+
+      <section className="panel" style={{ marginTop: 18 }}>
+        <div className="panel-head">
+          <h2>
+            <IconImage size={15} /> Image generation
+          </h2>
+        </div>
+        <div className="providers">
+          {IMAGE_PROVIDERS.map((p) => {
+            const credId = p.keyRef || p.id;
+            const ready = !p.needsKey || hasCredential(credId, s);
+            return (
+              <div key={p.id} className={`provider ${ready ? 'ready' : ''} ${p.free ? 'free' : ''}`}>
+                <div className="provider-head">
+                  <div className="provider-letter">{p.name[0]}</div>
+                  <div className="provider-id">
+                    <div className="provider-name">
+                      {p.name} <span className="provider-vendor">{p.vendor}</span>
+                    </div>
+                    <div className="provider-note">{p.note}</div>
+                  </div>
+                  <div className={`provider-status ${ready ? 'ok' : 'nokey'}`}>
+                    <span className="led" />
+                    {ready ? (p.needsKey ? 'Key ready' : 'Ready — no key') : 'Needs OpenAI key'}
+                  </div>
+                </div>
+                <div className="provider-models">
+                  {p.models.map((m) => (
+                    <span key={m.id} className="pmodel" title={m.id}>
+                      {m.label}
+                      {(m.tags || []).includes('FREE') ? <b className="tag tag-free">Free</b> : <b className="tag tag-paid">Paid</b>}
+                    </span>
+                  ))}
+                </div>
+                {p.keyUrl ? (
+                  <div className="provider-keyrow">
+                    <a className="btn btn-ghost btn-sm" href={p.keyUrl} target="_blank" rel="noreferrer">
+                      Get key <IconExternal size={12} />
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

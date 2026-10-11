@@ -88,7 +88,7 @@ export default function Sidebar() {
                 >
                   <div className="conv-title">{c.title || 'New chat'}</div>
                   <div className="conv-meta">
-                    {c.messages.find((m) => m.mode === 'team') ? 'Team' : 'Solo'} ·{' '}
+                    {c.messages.find((m) => m.mode === 'team') ? 'Team' : c.messages.find((m) => m.kind === 'image') ? 'Image' : 'Solo'} ·{' '}
                     {new Date(c.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                   </div>
                   <button

@@ -3,7 +3,7 @@ import { useStore, actions } from '../store.js';
 import Message from './Message.jsx';
 import Composer from './Composer.jsx';
 import AgentsPanel from './AgentsPanel.jsx';
-import { Logo, IconAgents, IconDownload, IconPlus, IconSparkle, IconCode, IconBrain, IconBolt } from './Icons.jsx';
+import { Logo, IconAgents, IconDownload, IconPlus, IconSparkle, IconCode, IconBrain, IconBolt, IconImage } from './Icons.jsx';
 
 const SUGGESTIONS = [
   {
@@ -30,6 +30,13 @@ const SUGGESTIONS = [
     sub: 'clear, bold, structured',
     prompt: 'Explain how large language models work — for a smart 12-year-old. Use a great analogy and bold structure.',
   },
+  {
+    icon: <IconImage size={16} />,
+    title: 'Generate an image',
+    sub: 'free · no key needed',
+    mode: 'image',
+    prompt: 'A futuristic OLED-black megacity at night, neon emerald light trails, cinematic wide shot, ultra detailed, moody atmosphere',
+  },
 ];
 
 function Hero() {
@@ -50,7 +57,7 @@ function Hero() {
         <span className="hp">Reviewer</span> <span className="hp-arrow">→</span>
         <span className="hp">Synthesizer</span>
       </div>
-      <p className="hero-models">DeepSeek · Qwen · Claude · GPT · free zero-key models</p>
+      <p className="hero-models">DeepSeek · Qwen · Claude · GPT · Gemini · Groq · GitHub · free models</p>
       {freeReady ? (
         <div className="hero-free">
           <span className="led" /> Free mode active — no keys needed. Add keys anytime for frontier models.
@@ -58,7 +65,14 @@ function Hero() {
       ) : null}
       <div className="suggestions">
         {SUGGESTIONS.map((sg, i) => (
-          <button key={i} className="suggestion" onClick={() => actions.sendMessage(sg.prompt)}>
+        <button
+          key={i}
+          className="suggestion"
+          onClick={() => {
+            if (sg.mode) actions.setSettings({ mode: sg.mode });
+            actions.sendMessage(sg.prompt);
+          }}
+        >
             <span className="sg-icon">{sg.icon}</span>
             <span className="sg-title">{sg.title}</span>
             <span className="sg-sub">{sg.sub}</span>
@@ -117,7 +131,7 @@ export default function ChatView() {
           <span className="chat-head-name">{conv?.title || 'New chat'}</span>
           <span className="chat-head-meta">
             {messages.length} {messages.length === 1 ? 'message' : 'messages'} ·{' '}
-            {s.settings.mode === 'team' ? 'Team mode' : 'Solo mode'}
+            {s.settings.mode === "team" ? "Team mode" : s.settings.mode === "image" ? "Image mode" : "Solo mode"}
           </span>
         </div>
         <div className="chat-head-actions">

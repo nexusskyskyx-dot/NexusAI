@@ -62,6 +62,44 @@ export const PROVIDERS = [
     ],
   },
   {
+    id: 'groq',
+    name: 'Groq',
+    vendor: 'Free tier · fastest',
+    kind: 'openai',
+    baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
+    needsKey: true,
+    keyUrl: 'https://console.groq.com/keys',
+    direct: false,
+    free: true,
+    note: 'Groq’s LPU inference is absurdly fast. Free tier: 30 requests/min, ~1,000/day — Llama 4, Llama 3.3 70B and GPT-OSS 120B included.',
+    headers: (key) => ({ Authorization: `Bearer ${key}` }),
+    models: [
+      { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', tags: ['FREE', 'SMART'] },
+      { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', tags: ['FREE', 'SMART'] },
+      { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', tags: ['FREE', '1M CTX'] },
+      { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant', tags: ['FREE', 'FAST'] },
+    ],
+  },
+  {
+    id: 'gemini',
+    name: 'Gemini · Google AI Studio',
+    vendor: 'Free tier · generous',
+    kind: 'openai',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    needsKey: true,
+    keyUrl: 'https://aistudio.google.com/apikey',
+    direct: true,
+    free: true,
+    note: 'Google AI Studio key — one of the most generous free quotas (Flash models, up to ~15M tokens/day). OpenAI-compatible endpoint.',
+    headers: (key) => ({ Authorization: `Bearer ${key}` }),
+    models: [
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', tags: ['FREE', 'FAST'] },
+      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', tags: ['FREE', 'FAST'] },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', tags: ['FREE'] },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', tags: ['PAID', 'SMART'] },
+    ],
+  },
+  {
     id: 'anthropic',
     name: 'Claude · Anthropic',
     vendor: 'API key',
@@ -121,6 +159,61 @@ export const PROVIDERS = [
     ],
   },
   {
+    id: 'github',
+    name: 'GitHub Models',
+    vendor: 'Free · GitHub PAT',
+    kind: 'openai',
+    baseUrl: 'https://models.github.ai/inference/chat/completions',
+    needsKey: true,
+    keyUrl: 'https://github.com/settings/personal-access-tokens/new',
+    direct: false,
+    free: true,
+    note: 'Free inference with your GitHub account — create a fine-grained PAT with “models: read”. GPT-4o, GPT-4.1, Llama 4 and more, rate-limited.',
+    headers: (key) => ({ Authorization: `Bearer ${key}` }),
+    models: [
+      { id: 'openai/gpt-4o', label: 'GPT-4o', tags: ['FREE', 'SMART'] },
+      { id: 'openai/gpt-4.1', label: 'GPT-4.1', tags: ['FREE', '1M CTX'] },
+      { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini', tags: ['FREE', 'FAST'] },
+      { id: 'meta/Llama-4-Scout-17B-16E-Instruct', label: 'Llama 4 Scout', tags: ['FREE'] },
+    ],
+  },
+  {
+    id: 'mistral',
+    name: 'Mistral',
+    vendor: 'Free tier',
+    kind: 'openai',
+    baseUrl: 'https://api.mistral.ai/v1/chat/completions',
+    needsKey: true,
+    keyUrl: 'https://console.mistral.ai/api-keys',
+    direct: false,
+    free: true,
+    note: 'Mistral La Plateforme free tier (phone verification). European, fast, solid general models. Routed through the local server proxy.',
+    headers: (key) => ({ Authorization: `Bearer ${key}` }),
+    models: [
+      { id: 'mistral-small-latest', label: 'Mistral Small', tags: ['FREE', 'FAST'] },
+      { id: 'mistral-large-latest', label: 'Mistral Large', tags: ['PAID', 'SMART'] },
+      { id: 'codestral-latest', label: 'Codestral', tags: ['PAID', 'CODE'] },
+    ],
+  },
+  {
+    id: 'cerebras',
+    name: 'Cerebras',
+    vendor: 'Free tier',
+    kind: 'openai',
+    baseUrl: 'https://api.cerebras.ai/v1/chat/completions',
+    needsKey: true,
+    keyUrl: 'https://cloud.cerebras.ai/',
+    direct: false,
+    free: true,
+    note: 'Cerebras wafer-scale inference — thousands of tokens/second. Free daily quota. Routed through the local server proxy.',
+    headers: (key) => ({ Authorization: `Bearer ${key}` }),
+    models: [
+      { id: 'llama-3.3-70b', label: 'Llama 3.3 70B', tags: ['FREE', 'SMART'] },
+      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tags: ['FREE'] },
+      { id: 'qwen-3-32b', label: 'Qwen 3 32B', tags: ['FREE', 'CODE'] },
+    ],
+  },
+  {
     id: 'openai',
     name: 'ChatGPT · OpenAI',
     vendor: 'API key',
@@ -129,7 +222,7 @@ export const PROVIDERS = [
     needsKey: true,
     keyUrl: 'https://platform.openai.com/api-keys',
     direct: false,
-    note: 'OpenAI GPT-4o / GPT-4.1 family. Routed through the local server proxy (OpenAI blocks direct browser calls).',
+    note: 'OpenAI GPT-4o / GPT-4.1 family + DALL·E / GPT-Image image generation. Routed through the local server proxy.',
     headers: (key) => ({ Authorization: `Bearer ${key}` }),
     models: [
       { id: 'gpt-4o', label: 'GPT-4o', tags: ['SMART', 'VISION'] },
@@ -154,8 +247,54 @@ export const PROVIDERS = [
   },
 ];
 
+// ── image generation providers ───────────────────────────────────────────────
+// kind:
+//   'pollinations-image' → free GET https://image.pollinations.ai/prompt/…
+//   'openai-images'      → POST /v1/images/generations (uses the OpenAI key)
+// keyRef: which chat provider's key to use (image registry shares credentials)
+export const IMAGE_PROVIDERS = [
+  {
+    id: 'pollinations',
+    name: 'Pollinations Image',
+    vendor: 'Free · no key',
+    kind: 'pollinations-image',
+    baseUrl: 'https://image.pollinations.ai/prompt/',
+    needsKey: false,
+    keyRef: null,
+    keyUrl: 'https://pollinations.ai',
+    free: true,
+    direct: true,
+    note: 'Flux & Turbo image generation — completely free, no key, no signup. Runs straight from your browser.',
+    models: [
+      { id: 'flux', label: 'Flux', tags: ['FREE', 'QUALITY'] },
+      { id: 'turbo', label: 'Turbo', tags: ['FREE', 'FAST'] },
+    ],
+  },
+  {
+    id: 'openai-images',
+    name: 'DALL·E · OpenAI',
+    vendor: 'Uses your OpenAI key',
+    kind: 'openai-images',
+    baseUrl: 'https://api.openai.com/v1/images/generations',
+    needsKey: true,
+    keyRef: 'openai',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    free: false,
+    direct: false,
+    note: 'DALL·E 3 and GPT-Image 1 — premium quality through your existing OpenAI key, routed via the local server proxy.',
+    models: [
+      { id: 'dall-e-3', label: 'DALL·E 3', tags: ['PAID', 'QUALITY'] },
+      { id: 'gpt-image-1', label: 'GPT-Image 1', tags: ['PAID', 'SMART'] },
+    ],
+  },
+];
+
 export function getProvider(id) {
   return PROVIDERS.find((p) => p.id === id) || null;
+}
+
+export function getImageProvider(id) {
+  return IMAGE_PROVIDERS.find((p) => p.id === id) || null;
 }
 
 export function getModel(providerId, modelId) {

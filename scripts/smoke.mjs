@@ -86,4 +86,26 @@ try {
 }
 console.log(`[4] abort ${aborted ? 'ok' : 'FAILED'}`);
 
+// 5 · automatic failover — a dead drafter must switch to a pool model and finish
+const r5 = await runTeam({
+  messages: [{ role: 'user', content: 'test failover' }],
+  cfg: {
+    workers: [{ provider: 'nope', model: 'dead-model' }],
+    planner: null,
+    critic: null,
+    synth: { provider: 'demo', model: 'nexus-demo' },
+    pool: [
+      { provider: 'also-dead', model: 'x' },
+      { provider: 'demo', model: 'nexus-demo' },
+    ],
+    settings: { temperature: 0.5, maxTokens: 400, planner: false, critic: false, stagger: false, transport: 'proxy' },
+    keys: {},
+  },
+  cb: {},
+});
+const worker5 = r5.agents.find((a) => a.role === 'worker');
+console.log(`[5] failover — worker status=${worker5.status} provider=${worker5.provider} note=${JSON.stringify(worker5.note)}`);
+if (worker5.status !== 'done' || worker5.provider !== 'demo') throw new Error('failover did not recover the worker');
+if (r5.finalText.length < 100) throw new Error('failover produced no final answer');
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

@@ -31,6 +31,7 @@ function AgentCard({ a }) {
         {hasText ? <span className="agent-caret">{open ? '▾' : '▸'}</span> : null}
       </div>
       {a.error ? <div className="agent-error">⚠ {a.error}</div> : null}
+      {a.note ? <div className="agent-note">⇄ {a.note}</div> : null}
       {a.reasoning?.trim() && open ? (
         <div className="agent-reasoning">
           <IconBrain size={12} /> reasoning: {a.reasoning.length.toLocaleString()} chars

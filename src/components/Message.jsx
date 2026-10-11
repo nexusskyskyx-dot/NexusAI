@@ -222,7 +222,34 @@ export default function Message({ msg, isLast }) {
       <TeamBadge msg={msg} />
       <Reasoning text={msg.reasoning} />
 
-      {empty ? (
+      {msg.kind === 'image' ? (
+        msg.images?.length ? (
+          <div className={`img-grid n${Math.min(msg.images.length, 4)}`}>
+            {msg.images.map((im, i) =>
+              im.src ? (
+                <button key={i} className="img-card" onClick={() => actions.openStudio(im, msg.id)} title="Open in viewer / editor">
+                  <img src={im.src} alt={im.prompt || 'generated image'} loading="lazy" />
+                  <span className="img-cap">
+                    {im.model} · {im.w}×{im.h}
+                  </span>
+                </button>
+              ) : (
+                <div key={i} className="img-card expired">
+                  <span className="img-expired">Image expired — regenerate</span>
+                </div>
+              )
+            )}
+          </div>
+        ) : (
+          <div className="msg-ai-wait">
+            <span className="shimmer" />
+            <span className="wait-label">
+              Painting your image<span className="wait-dots">…</span>
+            </span>
+            <span className="wait-sub">{msg.model}</span>
+          </div>
+        )
+      ) : empty ? (
         <div className="msg-ai-wait">
           <span className="shimmer" />
           <span className="wait-label">

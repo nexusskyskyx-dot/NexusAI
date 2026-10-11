@@ -7,7 +7,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { serializeProviders } from '../shared/providers.js';
+import { serializeProviders, PROVIDERS, IMAGE_PROVIDERS } from '../shared/providers.js';
 import { streamDemo, demoResponse } from './demo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +26,12 @@ const ENV_KEYS = {
   openai: process.env.OPENAI_API_KEY,
   anthropic: process.env.ANTHROPIC_API_KEY,
   qwen: process.env.DASHSCOPE_API_KEY,
+  groq: process.env.GROQ_API_KEY,
+  gemini: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+  github: process.env.GITHUB_MODELS_TOKEN || process.env.GITHUB_TOKEN,
+  mistral: process.env.MISTRAL_API_KEY,
+  cerebras: process.env.CEREBRAS_API_KEY,
+  'openai-images': process.env.OPENAI_API_KEY,
 };
 
 app.get('/api/health', (_req, res) => {
@@ -59,10 +65,12 @@ app.post('/api/proxy', async (req, res) => {
     }
   }
 
-  const reg = (await import('../shared/providers.js')).PROVIDERS.find((p) => p.id === provider);
+  const reg =
+    PROVIDERS.find((p) => p.id === provider) ||
+    IMAGE_PROVIDERS.find((p) => p.id === provider);
   if (!reg) return res.status(400).json({ error: { message: `Unknown provider "${provider}"` } });
 
-  const key = (apiKey || ENV_KEYS[provider] || '').trim();
+  const key = (apiKey || ENV_KEYS[reg.keyRef || provider] || '').trim();
   if (reg.needsKey && !key) {
     return res.status(400).json({
       error: { message: `No API key set for ${reg.name}. Add one in Keys & Models, or set ${provider.toUpperCase()}_API_KEY on the server.` },

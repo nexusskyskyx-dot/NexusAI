@@ -4,8 +4,9 @@
 import { useSyncExternalStore } from 'react';
 import { storage, uid } from '@lib/storage.js';
 import { streamChat, friendlyError } from '@lib/ai.js';
+import { generateImage, IMAGE_ASPECTS } from '@lib/images.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
-import { modelLabel, getProvider, PROVIDERS } from '@shared/providers.js';
+import { modelLabel, getProvider, getModel, PROVIDERS } from '@shared/providers.js';
 
 // ── state ────────────────────────────────────────────────────────────────────
 let state = {
@@ -15,12 +16,14 @@ let state = {
   keys: storage.loadKeys(),
   settings: storage.loadSettings(),
   solo: storage.loadSolo(),
+  image: storage.loadImage(),
   squad: storage.loadSquad(),
   conversations: storage.loadConvs(),
   activeId: null,
   view: 'chat',
   agentsOpen: false,
   sidebarOpen: false,
+  studio: null, // { img, msgId } → image viewer/editor modal
   streaming: false,
   streamMsg: null, // {convId, msgId}
   toasts: [],
@@ -53,6 +56,7 @@ function schedulePersist() {
     storage.saveKeys(state.keys);
     storage.saveSettings(state.settings);
     storage.saveSolo(state.solo);
+    storage.saveImage(state.image);
     storage.saveSquad(state.squad);
     storage.saveConvs(state.conversations.map((c) => ({ ...c, messages: c.messages.map((m) => ({ ...m, streaming: false })) })));
     storage.saveRuns(state.runs);
@@ -113,9 +117,14 @@ export function providerStatus(p, s = state) {
 const SQUAD_PREFS = [
   { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   { provider: 'openai', model: 'gpt-4o' },
+  { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+  { provider: 'gemini', model: 'gemini-2.5-flash' },
   { provider: 'openrouter', model: 'deepseek/deepseek-chat-v3-0324:free' },
   { provider: 'deepseek', model: 'deepseek-chat' },
   { provider: 'qwen', model: 'qwen3-max' },
+  { provider: 'github', model: 'openai/gpt-4o-mini' },
+  { provider: 'mistral', model: 'mistral-small-latest' },
+  { provider: 'cerebras', model: 'llama-3.3-70b' },
   { provider: 'openrouter', model: 'qwen/qwen3-coder:free' },
   { provider: 'openrouter', model: 'openai/gpt-oss-120b:free' },
   { provider: 'pollinations', model: 'openai' },
@@ -123,6 +132,25 @@ const SQUAD_PREFS = [
   { provider: 'pollinations', model: 'mistral' },
   { provider: 'demo', model: 'nexus-demo' },
 ];
+// Ordered fallback pool: every model the user can actually run right now
+// (has a key or needs none). Used for automatic agent failover.
+export function buildPool(s = state) {
+  const pool = [];
+  const seen = new Set();
+  const add = (provider, model) => {
+    const k = provider + '/' + model;
+    if (seen.has(k) || !getModel(provider, model) || !hasCredential(provider, s)) return;
+    seen.add(k);
+    pool.push({ provider, model });
+  };
+  for (const p of SQUAD_PREFS) add(p.provider, p.model);
+  for (const m of s.liveModels.pollinations || []) add('pollinations', m.id);
+  add('pollinations', 'openai');
+  add('pollinations', 'qwen-coder');
+  add('pollinations', 'mistral');
+  add('demo', 'nexus-demo');
+  return pool;
+}
 export function recommendedSquad(s = state) {
   const picks = [];
   for (const pref of SQUAD_PREFS) {
@@ -232,9 +260,16 @@ async function generate(convId, history) {
     content: '',
     reasoning: '',
     mode,
-    model: mode === 'solo' ? modelLabel(solo.provider, solo.model) : null,
+    kind: mode === 'image' ? 'image' : undefined,
+    model:
+      mode === 'solo'
+        ? modelLabel(solo.provider, solo.model)
+        : mode === 'image'
+        ? `${state.image.model} · ${state.image.provider === 'pollinations' ? 'Pollinations' : 'OpenAI'}`
+        : null,
     agents: [],
     stages: [],
+    images: [],
     streaming: true,
     ts: Date.now(),
   };
@@ -257,7 +292,34 @@ async function generate(convId, history) {
   };
 
   try {
-    if (mode === 'solo') {
+    if (mode === 'image') {
+      const cfg = state.image || {};
+      const aspect = IMAGE_ASPECTS.find((x) => x.id === cfg.aspect) || IMAGE_ASPECTS[0];
+      const count = Math.max(1, Math.min(4, cfg.count || 1));
+      const prompt = history[history.length - 1]?.content || '';
+      const images = [];
+      let lastErr = null;
+      for (let i = 0; i < count; i++) {
+        try {
+          const img = await generateImage({
+            provider: cfg.provider || 'pollinations',
+            model: cfg.model || 'flux',
+            prompt,
+            aspect: aspect.id,
+            apiKey: keys[cfg.provider === 'openai-images' ? 'openai' : cfg.provider],
+            signal,
+          });
+          images.push(img);
+          queueStreamPatch(convId, msg.id, { images: [...images] });
+        } catch (e) {
+          if (e.name === 'AbortError') throw e;
+          lastErr = e;
+          if (!images.length) throw e;
+          break;
+        }
+      }
+      finish({ images, error: lastErr ? `Some images failed: ${friendlyError(lastErr)}` : undefined });
+    } else if (mode === 'solo') {
       let text = '';
       let reasoning = '';
       const r = await streamChat({
@@ -289,7 +351,7 @@ async function generate(convId, history) {
       const stages = [];
       const result = await runTeam({
         messages: history,
-        cfg: { ...squad, settings, keys },
+        cfg: { ...squad, settings, keys, pool: buildPool() },
         signal,
         cb: {
           onStage: (st) => {
@@ -433,6 +495,9 @@ export const actions = {
       return { keys };
     }, { persist: true }),
   setSolo: (patch) => setState((s) => ({ solo: { ...s.solo, ...patch } }), { persist: true }),
+  setImage: (patch) => setState((s) => ({ image: { ...s.image, ...patch } }), { persist: true }),
+  openStudio: (img, msgId = null) => setState({ studio: { img, msgId } }),
+  closeStudio: () => setState({ studio: null }),
   setSquad: (patch) => setState((s) => ({ squad: { ...s.squad, ...patch } }), { persist: true }),
   applyRecommendedSquad: () => setState({ squad: recommendedSquad() }, { persist: true }),
   newConversation,
