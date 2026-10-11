@@ -3,6 +3,7 @@ import { useStore, actions } from '../store.js';
 import { Logo, IconChat, IconAgents, IconCode, IconKeys, IconPlus, IconTrash, IconBolt, IconX, IconFolder } from './Icons.jsx';
 
 const ACCENTS = [
+  { id: 'platinum', c: '#dcdde2' },
   { id: 'green', c: '#00d492' },
   { id: 'cyan', c: '#4da3ff' },
   { id: 'violet', c: '#a78bfa' },

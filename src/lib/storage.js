@@ -51,9 +51,9 @@ function stripBigImages(convs) {
 export const storage = {
   loadKeys: () => load(K.keys, {}),
   saveKeys: (v) => save(K.keys, v),
-  loadSettings: () =>
-    load(K.settings, {
-      accent: 'green',
+  loadSettings: () => {
+    const s = load(K.settings, {
+      accent: 'platinum',
       mode: 'team', // 'solo' | 'team' | 'image'
       transport: 'auto', // 'auto' | 'direct' | 'proxy'
       temperature: 0.7,
@@ -62,7 +62,15 @@ export const storage = {
       critic: true,
       stagger: true,
       sidebarCollapsed: false,
-    }),
+    });
+    // v1.7 one-time migration: the old default (green) becomes platinum;
+    // deliberately picked colors are kept, and the flag prevents re-migration.
+    if (!s.accMigrated) {
+      if (s.accent === 'green') s.accent = 'platinum';
+      s.accMigrated = true;
+    }
+    return s;
+  },
   saveSettings: (v) => save(K.settings, v),
   loadConvs: () => load(K.convs, []),
   saveConvs: (v) => {

@@ -30,7 +30,7 @@ export default function App() {
 
   useEffect(() => {
     actions.boot();
-    document.documentElement.dataset.acc = s.settings.accent || 'green';
+    document.documentElement.dataset.acc = s.settings.accent || 'platinum';
   }, []);
 
   // Escape closes things in priority order:
