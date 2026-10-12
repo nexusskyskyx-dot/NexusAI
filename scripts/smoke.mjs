@@ -521,4 +521,67 @@ const css13 = demoResponse({ messages: [ { role: 'system', content: 'You are the
 if (!/backdrop-filter|linear-gradient/.test(css13)) throw new Error('demo designer styling not upgraded');
 console.log(`[13] design sense — KB styles ✓ · MDN docs ✓ · gallery refs ✓ (${dr13.refs.length}) · trends ✓ · demo 2026 look ✓`);
 
+// 14 · easy keys — smart paste detection, backup round-trip, connect flow UI
+const { parseKeys, exportEnv, maskKey } = await import('../src/lib/keydetect.js');
+const A14 = A11; // reuse the live store + React from the sweep
+
+// detection: single, .env file (export/quotes/comments/unknown vars), multi bare
+const k14a = parseKeys('gsk_abc123def456ghi789jkl012mno');
+if (k14a[0]?.provider !== 'groq') throw new Error('bare key not detected');
+const k14b = parseKeys(
+  '# my keys\n' +
+  'export GROQ_API_KEY="gsk_aaaa1111bbbb2222cccc3333dddd4444"\n' +
+  'OPENROUTER_API_KEY=sk-or-v1-xyz123longkeyvaluehere99\n' +
+  "GEMINI_API_KEY='AIzaSyD-1234567890abcdefghijklmnopqrstu'\n" +
+  'SOME_OTHER_VAR=hello\n'
+);
+if (k14b.length !== 3 || k14b.map((r) => r.provider).join(',') !== 'groq,openrouter,gemini')
+  throw new Error('.env parsing wrong: ' + JSON.stringify(k14b.map((r) => r.provider)));
+const k14c = parseKeys(
+  'sk-ant-api03-aaaa-bbbb-cccc-dddd-eeeeffff1111\n' +
+  'hf_xxabcdefgh1234567890abcdefgh12345\n' +
+  'nvapi-nexus123nexus123nexus123nexus1\n' +
+  'github_pat_11AAAAAAA0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+  'csk-cerebraskey1234567890abcdef\n'
+);
+if (k14c.map((r) => r.provider).join(',') !== 'anthropic,huggingface,nvidia,github,cerebras')
+  throw new Error('multi bare keys wrong: ' + JSON.stringify(k14c.map((r) => r.provider)));
+// ambiguity + exotic formats
+const k14d = parseKeys('sk-0123456789abcdef0123456789abcdef');
+if (k14d[0].provider !== 'deepseek' || k14d[0].guess !== true) throw new Error('sk-32hex should be deepseek (switchable)');
+if (parseKeys('abcdef0123456789abcdef0123456789.0123456789abcdef0123456789abcdef')[0].provider !== 'zai') throw new Error('zai id.secret not detected');
+if (parseKeys('thisIsNotAnyKnownKeyFormat12345')[0].provider !== null) throw new Error('unknown key should offer picker');
+// dedupe: last value wins per provider
+const k14e = parseKeys('gsk_firstkeyaaaaaaaaaaaaaaaaaaaaa\ngsk_secondkeybbbbbbbbbbbbbbbbbbbbbbb');
+if (k14e.length !== 1 || !/second/.test(k14e[0].key)) throw new Error('dedupe failed');
+
+// backup round-trip: exportEnv → parseKeys recovers the same keys
+const env14 = exportEnv({ groq: 'gsk_roundtrip_test_1234567890abcd', openrouter: 'sk-or-v1-roundtrip-test-1234567890' });
+const back14 = parseKeys(env14);
+if (back14.length !== 2 || back14[0].key !== 'gsk_roundtrip_test_1234567890abcd' || back14[1].key !== 'sk-or-v1-roundtrip-test-1234567890')
+  throw new Error('backup round-trip failed: ' + JSON.stringify(back14));
+
+// UI flow: zero keys → first-run guide; connect via SmartPaste path → guide gone, check-all appears
+A14.setView('keys');
+A14.removeKey('groq'); A14.removeKey('openrouter');
+let html14 = renderToString(React11.createElement(App));
+if (!html14.includes('Quick Connect')) throw new Error('Quick Connect panel missing');
+if (!html14.includes('Get your first key')) throw new Error('first-run guide missing with zero keys');
+if (!html14.includes('60 seconds')) throw new Error('quick start cards missing');
+// simulate the exact SmartPaste connect: parse → patch → setKeys
+const rows14 = parseKeys('GROQ_API_KEY=gsk_uiflow_test_1234567890abcd\nOPENROUTER_API_KEY=sk-or-v1-uiflow-test-1234567890');
+const patch14 = {};
+for (const r of rows14) patch14[r.provider] = r.key;
+A14.setKeys(patch14);
+html14 = renderToString(React11.createElement(App));
+if (html14.includes('Get your first key')) throw new Error('first-run guide should hide once keys exist');
+if (!html14.includes('Check all 2')) throw new Error('check-all button missing after connecting keys');
+if (!/Key saved/.test(html14)) throw new Error('provider status does not show Key saved');
+if (!/Connected 3|Connected \d/.test(html14)) throw new Error('connected filter count missing');
+// masked display never leaks the full key into the page
+if (html14.includes('gsk_uiflow_test_1234567890abcd')) throw new Error('full key leaked into render');
+if (maskKey('gsk_uiflow_test_1234567890abcd') === 'gsk_uiflow_test_1234567890abcd') throw new Error('maskKey not masking');
+A14.removeKey('groq'); A14.removeKey('openrouter'); // leave clean state
+console.log(`[14] easy keys — detect ✓ (.env/multi/ambiguous/exotic) · backup round-trip ✓ · connect flow UI ✓ (guide→hidden, check-all) · no key leak ✓`);
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');
