@@ -23,7 +23,8 @@
 import { streamChat, friendlyError } from './ai.js';
 import { modelLabel } from '@shared/providers.js';
 import { CONSOLE_SHIM } from './preview.js';
-import { searchWeb, researchQuery } from './websearch.js';
+import { searchWeb, researchQuery, researchDesign } from './websearch.js';
+import { designPack } from './designkb.js';
 
 export const PROJECT_STAGES = [
   { id: 'research', label: 'Research', glyph: '🌐', desc: 'Researcher searches the web for knowledge & ideas' },
@@ -540,6 +541,32 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
   }
   const knowledgeBlock = knowledge ? `\n\nWEB KNOWLEDGE (researched for this project):\n${knowledge.slice(0, 3500)}\n` : '';
 
+  // 🎨 DESIGN INTELLIGENCE — deterministic 2026 style pack (always) + live
+  // trend/gallery research (when web is on). The Designer codes to THIS, so
+  // projects look current instead of boring.
+  const dp = designPack(String(idea));
+  let designBlock = `DESIGN SYSTEM — follow this closely so the result looks professionally designed:\n${dp.text}\n`;
+  let designResearched = false;
+  if (web) {
+    try {
+      const dr = await researchDesign(`${String(idea).slice(0, 120)}`, { signal, fetchImpl: webFetch });
+      if (dr?.knowledge) designBlock += dr.knowledge;
+      designResearched = !!(dr?.trends || dr?.refs?.length);
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+    }
+    if (designResearched) {
+      say({
+        id: 'researcher',
+        kind: 'agent',
+        role: 'researcher',
+        text: `Found sources · 🎨 current design trends researched too.`,
+        tools: ROLE_META.researcher.tools,
+        done: true,
+      });
+    }
+  }
+
   // ── 1 · COORDINATOR (analyze_idea + plan_files) ────────────────────────────
   stage('plan');
   say({ id: 'coordinator', kind: 'agent', role: 'coordinator', text: 'Analyzing the idea…', tools: ROLE_META.coordinator.tools });
@@ -549,7 +576,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
       id: 'coordinator',
       role: 'coordinator',
       system: SYS.coordinator,
-      user: `PROJECT IDEA:\n${String(idea).slice(0, 2000)}${knowledgeBlock}`,
+      user: `PROJECT IDEA:\n${String(idea).slice(0, 2000)}${knowledgeBlock}\nSUGGESTED AESTHETIC: ${dp.name} — mention it in the plan's style/features.`,
       temperature: 0.3,
       maxTokens: 900,
     });
@@ -603,6 +630,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
           `PROJECT FILE: ${f.path}\n\n` +
           `Planned files:\n${plan.files.map((p) => `- ${p.path} — ${p.purpose || ''}`).join('\n')}\n\n` +
           (knowledge ? `Project knowledge from the web (use for accurate details, naming and features):\n${knowledge.slice(0, 1800)}\n\n` : '') +
+          (role === 'designer' ? `${designBlock}\n` : '') +
           (siblings ? `Already written files:\n${siblings}\n\n` : '') +
           (retry ? `IMPORTANT: your previous attempt returned an EMPTY file. Write the COMPLETE content of "${f.path}" now — real code/markup, no placeholders, no commentary.\n` : '') +
           `Write the complete content of "${f.path}" now. Output ONLY the raw file content — no markdown fences, no explanations.`,
@@ -976,6 +1004,21 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
     }
   }
 
+  // 🎨 style-aware upgrades: design requests get a fresh design system + trends
+  const styleChange = /design|style|look|color|colour|theme|polish|animation|animat|ui|interface|beautiful|modern|boring|pretty|visual|restyle/i.test(String(request));
+  let dpU = null;
+  if (styleChange) {
+    dpU = designPack(`${String(request).slice(0, 200)} ${project.title || ''}`);
+    if (web) {
+      try {
+        const dr = await researchDesign(String(request).slice(0, 120), { signal, fetchImpl: webFetch });
+        if (dr?.knowledge) knowledge += `\n${dr.knowledge}`;
+      } catch (e) {
+        if (e?.name === 'AbortError') throw e;
+      }
+    }
+  }
+
   say({ id: 'up-planner', kind: 'agent', role: 'coordinator', text: `Planning the upgrade to v${version}…`, tools: ROLE_META.coordinator.tools });
 
   // ── 1 · plan the change set ────────────────────────────────────────────────
@@ -1040,6 +1083,7 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
           `FILE: ${ch.path} (${ch.action})\nINSTRUCTION: ${ch.instruction || String(request).slice(0, 300)}\n\n` +
           `${manifestBlock([...filesMap.values()])}\n\n` +
           (knowledge ? `WEB KNOWLEDGE for this change:\n${knowledge.slice(0, 1500)}\n\n` : '') +
+          (dpU && role === 'designer' ? `DESIGN SYSTEM — follow this closely:\n${dpU.text}\n\n` : '') +
           (others ? `OTHER PROJECT FILES (context — keep ids/classes/references consistent):\n${others}\n\n` : '') +
           (current ? `---CURRENT FILE CONTENT---\n${current.slice(0, 9000)}\n---END CURRENT FILE CONTENT---\n\n` : '') +
           (retry ? `IMPORTANT: your previous attempt returned an EMPTY file. Write the COMPLETE ${ch.action === 'add' ? 'new file' : 'updated file'} now — real code/markup, no placeholders.\n` : '') +

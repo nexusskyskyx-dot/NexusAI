@@ -223,6 +223,94 @@ async function readSources(sources, { signal, fetchImpl } = {}) {
   return picks.map((s, i) => ({ source: s, page: pages[i] })).filter((x) => x.page);
 }
 
+// ── MDN Web Docs — authoritative coding knowledge ─────────────────────────────
+// Free JSON search endpoint; called browser-direct, with the reader fallback.
+async function mdnSearch(q, fetchImpl, signal) {
+  const api = `https://developer.mozilla.org/api/v1/search?q=${encodeURIComponent(q)}&locale=en-US&limit=3`;
+  let docs = null;
+  try {
+    const j = await jfetch(fetchImpl, api, { signal });
+    if (Array.isArray(j?.documents)) docs = j.documents;
+  } catch {}
+  if (!docs) {
+    const r = await readUrl(api, { signal, fetchImpl }).catch(() => null);
+    if (r) {
+      try {
+        const m = r.text.match(/\{[\s\S]*\}/);
+        if (m) docs = JSON.parse(m[0])?.documents;
+      } catch {}
+    }
+  }
+  if (!Array.isArray(docs)) return [];
+  return docs
+    .slice(0, 3)
+    .filter((d) => d && d.title)
+    .map((d) => ({
+      source: 'mdn',
+      title: clean(d.title, 90),
+      url: d.mdn_url
+        ? String(d.mdn_url).startsWith('http')
+          ? String(d.mdn_url)
+          : 'https://developer.mozilla.org' + String(d.mdn_url)
+        : 'https://developer.mozilla.org',
+      extract: clean(d.summary || 'MDN Web Docs reference', 400),
+    }));
+}
+
+// ── design galleries — real current designs as reference aesthetics ──────────
+const GALLERIES = ['https://darkmodedesign.com/', 'https://www.lapa.ninja/'];
+
+// Read a design gallery and extract its featured designs (titles + links).
+// The reader returns markdown, so links are parsed generically — works for
+// any server-rendered gallery. Self-links and nav items are filtered.
+export async function galleryRefs(_query, { signal, fetchImpl } = {}) {
+  for (const g of GALLERIES) {
+    const r = await readUrl(g, { signal, fetchImpl }).catch(() => null);
+    if (!r || !r.text) continue;
+    let ghost = '';
+    try { ghost = new URL(g).host; } catch { continue; }
+    const seen = new Set();
+    const refs = [];
+    for (const m of r.text.matchAll(/\[([^\]\n]{3,70})\]\((https?:\/\/[^)\s]+)\)/g)) {
+      const title = clean(m[1], 70);
+      let host = '';
+      try { host = new URL(m[2]).host; } catch { continue; }
+      if (!title || host === ghost) continue;
+      if (/^(about|submit|twitter|x|instagram|github|rss|contact|privacy|terms|login|sign|home|categories|tags)\b/i.test(title)) continue;
+      if (seen.has(m[2])) continue;
+      seen.add(m[2]);
+      refs.push({ title, url: m[2] });
+      if (refs.length >= 6) break;
+    }
+    if (refs.length >= 2) return refs;
+  }
+  return [];
+}
+
+// ── design intelligence — current-year trends + real reference designs ───────
+// researchDesign(subject) → { knowledge, refs, trends }
+// `knowledge` is a DESIGN block appended to the Designer agent's prompt so
+// generated projects follow what actually looks good THIS year.
+export async function researchDesign(subject, { signal, fetchImpl } = {}) {
+  const year = new Date().getFullYear();
+  const topic = clean(subject, 60);
+  const [w, refs] = await Promise.all([
+    searchWeb(`web design trends ${year} ${topic}`, { signal, fetchImpl, deep: true }).catch(() => null),
+    galleryRefs(topic, { signal, fetchImpl }).catch(() => []),
+  ]);
+  let knowledge = '';
+  if (w && w.ok && w.knowledge) {
+    knowledge = `\nDESIGN INTELLIGENCE — current ${year} web design trends (researched live — apply them):\n${w.knowledge.slice(0, 2000)}\n`;
+  }
+  if (refs.length) {
+    knowledge +=
+      `\nREFERENCE AESTHETICS — real current designs; emulate their style, palette and layout sense (never copy content):\n` +
+      refs.map((r) => `- ${r.title} — ${r.url}`).join('\n') +
+      '\n';
+  }
+  return { knowledge, refs, trends: !!(w && w.ok) };
+}
+
 // ── the Researcher ───────────────────────────────────────────────────────────
 // searchWeb(query, { signal, fetchImpl, deep }) →
 //   { ok, query, sources:[{source,title,url,extract,read}], pages, readCount, knowledge }
@@ -238,10 +326,14 @@ export async function searchWeb(query, { signal, fetchImpl, deep } = {}) {
     wikipedia(q, f, signal).catch(() => []),
     duckduckgo(q, f, signal).catch(() => []),
   ];
-  if (TECHY.test(q)) jobs.push(github(q, f, signal).catch(() => []));
-  const [wiki, ddg, gh] = await Promise.all(jobs);
+  const techy = TECHY.test(q);
+  if (techy) {
+    jobs.push(github(q, f, signal).catch(() => []));
+    jobs.push(mdnSearch(q, f, signal).catch(() => []));
+  }
+  const [wiki, ddg, gh, mdn] = await Promise.all(jobs);
 
-  const sources = [...wiki, ...ddg, ...(gh || [])].slice(0, 8);
+  const sources = [...wiki, ...ddg, ...(mdn || []), ...(gh || [])].slice(0, 8);
   if (!sources.length) return { ok: false, query, sources: [], pages: [], readCount: 0, knowledge: '' };
 
   // LIVE FETCHING — open and read the top pages for real, full information
@@ -262,6 +354,10 @@ export async function searchWeb(query, { signal, fetchImpl, deep } = {}) {
   if (ddg.length) {
     knowledge += `\n### Quick answers & related (DuckDuckGo)\n`;
     for (const s of ddg) knowledge += `**${s.title}** — ${s.extract}\n`;
+  }
+  if (mdn?.length) {
+    knowledge += `\n### Coding docs (MDN Web Docs — authoritative references)\n`;
+    for (const s of mdn) knowledge += `**${s.title}** — ${s.extract}\n`;
   }
   if (gh?.length) {
     knowledge += `\n### Open-source references (GitHub — inspiration & prior art)\n`;

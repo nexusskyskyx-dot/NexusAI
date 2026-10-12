@@ -479,4 +479,46 @@ const bad12 = await fetch(`${BASE12}/api/fetch?url=${encodeURIComponent('javascr
 if (bad12.status !== 400) throw new Error('server accepted a non-http URL (status ' + bad12.status + ')');
 console.log(`    server /api/fetch — json passthrough ✓ · html→text strip ✓ · non-http rejected ✓`);
 
+// 13 · design sense — KB styles, MDN coding docs, gallery refs, trend research
+const { designPack } = await import('../src/lib/designkb.js');
+const { searchWeb: searchWeb13, researchDesign: researchDesign13 } = await import('../src/lib/websearch.js');
+const dpA = designPack('a professional portfolio website');
+const dpB = designPack('a retro snake game');
+if (!dpA?.text || !/PALETTE/.test(dpA.text) || !/#[0-9a-f]{6}/i.test(dpA.text)) throw new Error('design pack missing palette');
+if (!/QUALITY BAR/.test(dpA.text)) throw new Error('design pack missing quality bar');
+if (dpA.id === dpB.id) throw new Error('style selection is not keyword-aware');
+if (dpB.id !== 'retro-terminal') throw new Error('game should pick retro-terminal, got ' + dpB.id);
+if (designPack('a random thing machine').id !== 'aurora-glass') throw new Error('default style wrong');
+
+// MDN coding docs flow through searchWeb for techy queries
+const mdnFetch = async (url) => {
+  if (url.includes('developer.mozilla.org')) return { ok: true, json: async () => ({ documents: [{ title: 'Web Audio API', mdn_url: '/en-US/docs/Web/API/Web_Audio_API', summary: 'Play and synthesize audio in the browser.' }] }) };
+  if (url.includes('api.github.com')) return { ok: true, json: async () => ({ items: [] }) };
+  if (url.includes('duckduckgo.com')) return { ok: true, json: async () => ({}) };
+  if (url.includes('list=search')) return { ok: true, json: async () => ({ query: { search: [] } }) };
+  return { ok: true, json: async () => ({ query: { pages: {} } }) };
+};
+const w13 = await searchWeb13('how to use the webaudio api', { fetchImpl: mdnFetch });
+if (!w13.sources.some((x) => x.source === 'mdn')) throw new Error('MDN coding docs missing from sources');
+if (!/Coding docs \(MDN Web Docs/.test(w13.knowledge)) throw new Error('MDN section missing from knowledge');
+
+// design research: current-year trends + real gallery references
+const designFetch = async (url) => {
+  if (url.includes('r.jina.ai/https://darkmodedesign.com'))
+    return { ok: true, text: async () => '# Dark Mode Design — dark interface gallery\n\nBrowse the best dark mode web designs. ' + 'Curated dark UI inspiration for designers and developers worldwide. '.repeat(6) + '\n\n[Neon portfolio by AK](https://example.com/ak)\n[Deep space dashboard](https://example.com/ds)\n[About](https://darkmodedesign.com/about)\n' };
+  if (url.includes('duckduckgo.com')) return { ok: true, json: async () => ({ Heading: 'Web design trends 2026', AbstractText: 'Glassmorphism, bento grids and aurora gradients dominate 2026.', AbstractURL: 'https://ddg.example/trends' }) };
+  if (url.includes('list=search')) return { ok: true, json: async () => ({ query: { search: [{ title: 'Web design trends 2026' }] } }) };
+  if (url.includes('r.jina.ai/')) return { ok: true, text: async () => 'FULL PAGE: 2026 trends include glass cards, bento layouts, gradient meshes. '.repeat(8) };
+  return { ok: true, json: async () => ({ query: { pages: { '1': { title: 'Web design trends 2026', extract: 'Bento grids, glassmorphism, aurora gradients.' } } } }) };
+};
+const dr13 = await researchDesign13('portfolio website', { fetchImpl: designFetch });
+if (!/DESIGN INTELLIGENCE/.test(dr13.knowledge)) throw new Error('design trend knowledge missing');
+if (!dr13.refs.some((r) => /Neon portfolio/.test(r.title))) throw new Error('gallery references missing');
+if (dr13.refs.some((r) => /darkmodedesign\.com/.test(r.url))) throw new Error('gallery self-links not filtered');
+
+// the demo Designer itself now ships the 2026 look
+const css13 = demoResponse({ messages: [ { role: 'system', content: 'You are the DESIGNER (FILE BUILDER) of the NexusAI project team.' }, { role: 'user', content: 'PROJECT FILE: css/style.css' } ] });
+if (!/backdrop-filter|linear-gradient/.test(css13)) throw new Error('demo designer styling not upgraded');
+console.log(`[13] design sense — KB styles ✓ · MDN docs ✓ · gallery refs ✓ (${dr13.refs.length}) · trends ✓ · demo 2026 look ✓`);
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');
