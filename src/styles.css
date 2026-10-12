@@ -1482,3 +1482,34 @@ body {
   background: var(--acc-dim);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
+
+/* ── v1.8.1 · mobile fix — scrollable project start screen ──────────────── */
+
+/* the start screen must scroll: .projectsview is overflow:hidden for the
+   room's internal panes, which made the wizard unscrollable on phones */
+.prj-start {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+.prj-start .prj-wizard { flex-shrink: 0; }
+
+/* phones: compact the wizard so the input is close to the top */
+@media (max-width: 760px) {
+  .prj-start .prj-wizard { padding: 18px 14px 40px; }
+  .prj-start .prj-friend { gap: 12px; padding: 14px; }
+  .prj-start .prj-friend-avatar { font-size: 22px; }
+  .prj-start .prj-friend p { font-size: 12.5px; }
+  .prj-start .prj-ideas { gap: 9px; }
+  .prj-start .prj-idea { padding: 12px; gap: 5px; }
+  .prj-start .prj-ideas-label { margin: 18px 2px 9px; }
+  .prj-start .prj-wizard-actions { margin-top: 12px; }
+  .prj-start .prj-own { margin-top: 10px; padding: 11px; }
+  .prj-start .prj-own textarea { font-size: 16px; }
+  .prj-start .prj-own-row { gap: 8px; }
+  .prj-start .prj-prev { margin-top: 20px; }
+}

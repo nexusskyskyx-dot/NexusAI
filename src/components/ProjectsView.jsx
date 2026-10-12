@@ -90,7 +90,11 @@ function StartScreen() {
   const s = useStore();
   const [offset, setOffset] = useState(() => Math.floor(Math.random() * IDEAS.length));
   const [own, setOwn] = useState('');
-  const [showOwn, setShowOwn] = useState(false);
+  // phones: show the idea input right away — it used to hide behind the
+  // toggle below the fold with no way to scroll to it
+  const [showOwn, setShowOwn] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 760px)').matches
+  );
 
   const ideas = [0, 1, 2].map((i) => IDEAS[(offset + i) % IDEAS.length]);
   const start = (idea) => {
@@ -713,7 +717,13 @@ export default function ProjectsView() {
   const project = s.projects.find((p) => p.id === s.activeProjectId);
   return (
     <div className="page projectsview">
-      {project ? <ProjectRoom project={project} /> : <StartScreen />}
+      {project ? (
+        <ProjectRoom project={project} />
+      ) : (
+        <div className="prj-start">
+          <StartScreen />
+        </div>
+      )}
     </div>
   );
 }
