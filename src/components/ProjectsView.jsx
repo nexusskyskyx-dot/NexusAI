@@ -185,7 +185,7 @@ function phaseLine(m) {
   const f = m.file ? ` ${m.file}` : '';
   switch (m.role) {
     case 'researcher':
-      return { title: 'Researched', obj: m.sources?.length ? `${m.sources.length} sources` : '' };
+      return { title: 'Researched', obj: m.sources?.length ? `${m.sources.length} sources${m.read ? ` · ${m.read} read live` : ''}` : '' };
     case 'coordinator':
       return { title: m.id.startsWith('up-') ? 'Planned the upgrade' : 'Planned', obj: '' };
     case 'designer':
@@ -236,7 +236,7 @@ function ChatMsg({ m }) {
         <span className="pc-sources">
           {m.sources.slice(0, 4).map((src, i) => (
             <a key={i} className="msrc" href={src.url} target="_blank" rel="noreferrer" title={src.title}>
-              {src.source === 'github' ? '⭑' : src.source === 'wikipedia' ? '📚' : '🦆'} {src.title}
+              {src.read ? '📖' : src.source === 'github' ? '⭑' : src.source === 'wikipedia' ? '📚' : '🦆'} {src.title}
             </a>
           ))}
         </span>

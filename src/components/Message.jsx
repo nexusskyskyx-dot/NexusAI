@@ -234,7 +234,7 @@ export default function Message({ msg, isLast }) {
           <span className="msg-sources-label">🌐 searched the web</span>
           {msg.sources.slice(0, 6).map((src, i) => (
             <a key={i} className="msrc" href={src.url} target="_blank" rel="noreferrer" title={src.title}>
-              {src.source === 'github' ? '⭑' : src.source === 'wikipedia' ? '📚' : '🦆'} {src.title}
+              {src.read ? '📖' : src.source === 'github' ? '⭑' : src.source === 'wikipedia' ? '📚' : '🦆'} {src.title}
             </a>
           ))}
         </div>

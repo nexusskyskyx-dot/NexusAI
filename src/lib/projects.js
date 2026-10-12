@@ -519,16 +519,17 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
     emitAgent({ ...rAgent });
     const t0 = performance.now();
     try {
-      const w = await searchWeb(query, { signal, fetchImpl: webFetch });
+      const w = await searchWeb(query, { signal, fetchImpl: webFetch, deep: true });
       knowledge = w.ok ? w.knowledge : '';
       emitAgent({ ...rAgent, status: 'done', ms: Math.round(performance.now() - t0), text: w.ok ? `${w.sources.length} sources` : 'no results' });
       say({
         id: 'researcher',
         kind: 'agent',
         role: 'researcher',
-        text: w.ok ? `Found ${w.sources.length} sources for the project:` : 'No web results — planning from model knowledge.',
+        text: w.ok ? `Found ${w.sources.length} sources${w.readCount ? ` · read ${w.readCount} pages live` : ''}:` : 'No web results — planning from model knowledge.',
         tools: ROLE_META.researcher.tools,
-        sources: w.sources.map((s) => ({ source: s.source, title: s.title, url: s.url })),
+        sources: w.sources.map((s) => ({ source: s.source, title: s.title, url: s.url, read: !!s.read })),
+        read: w.readCount || 0,
         done: true,
       });
     } catch (e) {
@@ -955,16 +956,17 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
     emitAgent({ ...rAgent });
     const t0 = performance.now();
     try {
-      const w = await searchWeb(query, { signal, fetchImpl: webFetch });
+      const w = await searchWeb(query, { signal, fetchImpl: webFetch, deep: true });
       knowledge = w.ok ? w.knowledge : '';
       emitAgent({ ...rAgent, status: 'done', ms: Math.round(performance.now() - t0), text: w.ok ? `${w.sources.length} sources` : 'no results' });
       say({
         id: 'up-researcher',
         kind: 'agent',
         role: 'researcher',
-        text: w.ok ? `Found ${w.sources.length} sources:` : 'No web results — applying model knowledge.',
+        text: w.ok ? `Found ${w.sources.length} sources${w.readCount ? ` · read ${w.readCount} pages live` : ''}:` : 'No web results — applying model knowledge.',
         tools: ROLE_META.researcher.tools,
-        sources: w.sources.map((s) => ({ source: s.source, title: s.title, url: s.url })),
+        sources: w.sources.map((s) => ({ source: s.source, title: s.title, url: s.url, read: !!s.read })),
+        read: w.readCount || 0,
         done: true,
       });
     } catch (e) {

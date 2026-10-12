@@ -334,7 +334,7 @@ async function generate(convId, history) {
       let soloSystem = SYSTEMS.solo;
       if (settings.web !== false) {
         try {
-          const web = await searchWeb(researchQuery(history[history.length - 1]?.content || '', 'chat'), { signal });
+          const web = await searchWeb(researchQuery(history[history.length - 1]?.content || '', 'chat'), { signal, deep: true });
           if (web.ok) {
             soloSystem += `\n\n${web.knowledge}`;
             queueStreamPatch(convId, msg.id, { sources: web.sources.map((s) => ({ source: s.source, title: s.title, url: s.url })) });

@@ -169,11 +169,66 @@ export function researchQuery(text, kind = 'chat') {
   return q || raw;
 }
 
+// ── LIVE page reading — real information, fetched now ─────────────────────────
+const READ_MAX_SOURCES = 3; // pages read fully per research run
+const READ_CHARS = 2600; // chars of each page injected into the knowledge
+
+function proxyBase() {
+  if (typeof globalThis.__NEXUS_PROXY_BASE === 'string') return globalThis.__NEXUS_PROXY_BASE;
+  return ''; // browser: same origin as the app
+}
+
+// Read one URL's full text, live. Route 1: the Jina reader (keyless,
+// CORS-friendly — works straight from the browser). Route 2: the NexusAI
+// server's /api/fetch (strips HTML server-side — reaches CORS-blocked sites
+// on self-hosted instances). Returns { url, text, via } or null.
+export async function readUrl(url, { signal, fetchImpl } = {}) {
+  const f = fetchImpl || (typeof fetch === 'function' ? fetch : null);
+  if (!f || !/^https?:\/\//i.test(url)) return null;
+  // 1 · Jina reader — clean markdown of any page
+  try {
+    const r = await fetchWithTimeout(f, `https://r.jina.ai/${url}`, { signal, ms: 9000 });
+    if (r.ok) {
+      const text = await r.text();
+      if (text && text.trim().length > 200) return { url, text: text.slice(0, READ_CHARS * 2), via: 'jina' };
+    }
+  } catch {}
+  // 2 · self-hosted server fetcher
+  try {
+    const r = await fetchWithTimeout(f, `${proxyBase()}/api/fetch?url=${encodeURIComponent(url)}`, { signal, ms: 9000 });
+    if (r.ok) {
+      const j = await r.json();
+      if (j?.text && String(j.text).trim().length > 100) return { url, text: String(j.text).slice(0, READ_CHARS * 2), via: 'server' };
+    }
+  } catch {}
+  return null;
+}
+
+// Read the most valuable sources fully, in parallel (live fetching).
+// Wikipedia articles first (full article > intro snippet), then quick-answer
+// pages, then GitHub repos. Skips duplicates.
+async function readSources(sources, { signal, fetchImpl } = {}) {
+  const seen = new Set();
+  const picks = [];
+  const rank = (s) => (s.source === 'wikipedia' ? 0 : s.source === 'duckduckgo' ? 1 : 2);
+  for (const s of [...sources].sort((a, b) => rank(a) - rank(b))) {
+    let host = '';
+    try { host = new URL(s.url).host; } catch { continue; }
+    if (seen.has(host)) continue;
+    seen.add(host);
+    picks.push(s);
+    if (picks.length >= READ_MAX_SOURCES) break;
+  }
+  const pages = await Promise.all(picks.map((s) => readUrl(s.url, { signal, fetchImpl })));
+  return picks.map((s, i) => ({ source: s, page: pages[i] })).filter((x) => x.page);
+}
+
 // ── the Researcher ───────────────────────────────────────────────────────────
-// searchWeb(query, { signal, fetchImpl }) →
-//   { ok, query, sources:[{source,title,url,extract}], knowledge }
+// searchWeb(query, { signal, fetchImpl, deep }) →
+//   { ok, query, sources:[{source,title,url,extract,read}], pages, readCount, knowledge }
 // `knowledge` is the prompt-ready context block injected into the agents.
-export async function searchWeb(query, { signal, fetchImpl } = {}) {
+// `deep: true` = LIVE FETCHING — the top sources are opened and read fully.
+export async function searchWeb(query, { signal, fetchImpl, deep } = {}) {
   const f = fetchImpl || (typeof fetch === 'function' ? fetch : null);
   if (!f) return { ok: false, query, sources: [], knowledge: '' };
   const q = clean(query, 300);
@@ -187,9 +242,19 @@ export async function searchWeb(query, { signal, fetchImpl } = {}) {
   const [wiki, ddg, gh] = await Promise.all(jobs);
 
   const sources = [...wiki, ...ddg, ...(gh || [])].slice(0, 8);
-  if (!sources.length) return { ok: false, query, sources: [], knowledge: '' };
+  if (!sources.length) return { ok: false, query, sources: [], pages: [], readCount: 0, knowledge: '' };
 
-  let knowledge = `## WEB KNOWLEDGE — researched for "${q}"\nUse these facts and references when answering. Cite source names naturally where relevant.\n`;
+  // LIVE FETCHING — open and read the top pages for real, full information
+  let pages = [];
+  if (deep) {
+    try {
+      pages = await readSources(sources, { signal, fetchImpl });
+      for (const p of pages) p.source.read = true;
+    } catch {}
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  let knowledge = `## WEB KNOWLEDGE — researched LIVE on ${today} for "${q}"\nUse these facts and references when answering. Cite source names naturally where relevant.\n`;
   if (wiki.length) {
     knowledge += `\n### Encyclopedic knowledge (Wikipedia)\n`;
     for (const s of wiki) knowledge += `**${s.title}** — ${s.extract}\n`;
@@ -202,7 +267,13 @@ export async function searchWeb(query, { signal, fetchImpl } = {}) {
     knowledge += `\n### Open-source references (GitHub — inspiration & prior art)\n`;
     for (const s of gh) knowledge += `- ${s.extract}\n`;
   }
-  return { ok: true, query, sources, knowledge: knowledge.slice(0, 6000) };
+  if (pages.length) {
+    knowledge += `\n### FULL PAGE CONTENT — fetched live (the real pages, not snippets)\n`;
+    for (const p of pages) {
+      knowledge += `\n#### ${p.source.title} (${p.source.url})\n${p.page.text.slice(0, READ_CHARS)}\n`;
+    }
+  }
+  return { ok: true, query, sources, pages, readCount: pages.length, knowledge: knowledge.slice(0, 9000) };
 }
 
 // Short label per source for the UI chips

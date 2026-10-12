@@ -434,4 +434,49 @@ for (const v of ['agents', 'canvas', 'keys']) {
 if (errors11.length) throw new Error('SSR render crashes: ' + errors11.join(' | '));
 console.log(`[11] SSR render sweep — 11 states, zero crashes ✓`);
 
+// 12 · LIVE FETCHING — the Researcher opens and reads real pages
+const { readUrl, searchWeb: searchWeb12 } = await import('../src/lib/websearch.js');
+// route 1: the Jina reader (browser-direct, keyless)
+const jinaFetch = async (url) => {
+  if (url.startsWith('https://r.jina.ai/'))
+    return { ok: true, text: async () => '# Pomodoro Technique\n\n' + 'The method uses a timer to break work into intervals. '.repeat(30) };
+  throw new Error('unexpected ' + url);
+};
+const r12a = await readUrl('https://en.wikipedia.org/wiki/Pomodoro_Technique', { fetchImpl: jinaFetch });
+if (!r12a || r12a.via !== 'jina' || !/Pomodoro Technique/.test(r12a.text)) throw new Error('jina read route failed');
+// route 2: the self-hosted server fetcher fallback
+const srvFetch = async (url) => {
+  if (url.includes('r.jina.ai')) return { ok: false };
+  if (url.includes('/api/fetch')) return { ok: true, json: async () => ({ text: 'Plain server-fetched page content about timers. '.repeat(10) }) };
+  throw new Error('unexpected ' + url);
+};
+const r12b = await readUrl('https://example.com/page', { fetchImpl: srvFetch });
+if (!r12b || r12b.via !== 'server' || !/server-fetched/.test(r12b.text)) throw new Error('server fallback route failed');
+// deep search: full pages merged into the knowledge block
+const deepFetch = async (url) => {
+  if (url.includes('r.jina.ai/')) return { ok: true, text: async () => 'FULL PAGE: the pomodoro technique uses a kitchen timer. '.repeat(20) };
+  if (url.includes('api.github.com'))
+    return { ok: true, json: async () => ({ items: [{ full_name: 'nexus/demo', stargazers_count: 42, description: 'demo app', html_url: 'https://github.com/nexus/demo' }] }) };
+  if (url.includes('duckduckgo.com'))
+    return { ok: true, json: async () => ({ Heading: 'Pomodoro', AbstractText: 'Time management method.', AbstractURL: 'https://ddg.example/pomodoro' }) };
+  if (url.includes('list=search')) return { ok: true, json: async () => ({ query: { search: [{ title: 'Pomodoro Technique' }] } }) };
+  return { ok: true, json: async () => ({ query: { pages: { '1': { title: 'Pomodoro Technique', extract: 'Timer-based work intervals.' } } } }) };
+};
+const w12 = await searchWeb12('pomodoro timer app', { fetchImpl: deepFetch, deep: true });
+console.log(`[12] live fetching — jina ✓ · server fallback ✓ · deep: ${w12.readCount} pages read`);
+if (!w12.ok || !w12.readCount || w12.readCount < 3) throw new Error('deep search did not read the top 3 pages');
+if (!/FULL PAGE CONTENT/.test(w12.knowledge)) throw new Error('full-page section missing from knowledge');
+if (!/researched LIVE on/.test(w12.knowledge)) throw new Error('live fetch date missing from knowledge');
+if (!/FULL PAGE: the pomodoro technique/.test(w12.knowledge)) throw new Error('page content missing from knowledge');
+if (!w12.sources.some((x) => x.read)) throw new Error('read flag missing on sources');
+// the real server endpoint: fetch our own health (JSON) + index (HTML strip)
+const BASE12 = globalThis.__NEXUS_PROXY_BASE;
+const j12 = await fetch(`${BASE12}/api/fetch?url=${encodeURIComponent(BASE12 + '/api/health')}`).then((r) => r.json());
+if (!j12?.text || !/NexusAI/.test(j12.text)) throw new Error('server /api/fetch (json) failed: ' + JSON.stringify(j12).slice(0, 160));
+const h12 = await fetch(`${BASE12}/api/fetch?url=${encodeURIComponent(BASE12 + '/')}`).then((r) => r.json());
+if (!h12?.text || /<html/i.test(h12.text) || !/NexusAI/i.test(h12.text)) throw new Error('server /api/fetch (html strip) failed');
+const bad12 = await fetch(`${BASE12}/api/fetch?url=${encodeURIComponent('javascript:alert(1)')}`);
+if (bad12.status !== 400) throw new Error('server accepted a non-http URL (status ' + bad12.status + ')');
+console.log(`    server /api/fetch — json passthrough ✓ · html→text strip ✓ · non-http rejected ✓`);
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

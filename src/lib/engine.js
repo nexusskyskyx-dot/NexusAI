@@ -185,11 +185,11 @@ export async function runTeam({ messages, cfg, cb, signal }) {
     emitAgent(a);
     const t0 = performance.now();
     try {
-      web = await searchWeb(query, { signal, fetchImpl: cfg.webFetch });
+      web = await searchWeb(query, { signal, fetchImpl: cfg.webFetch, deep: true });
       a.status = 'done';
       a.ms = Math.round(performance.now() - t0);
       a.text = web.ok
-        ? `"${query}" → ${web.sources.length} sources: ${web.sources.slice(0, 4).map((x) => x.title).join(' · ')}`
+        ? `"${query}" → ${web.sources.length} sources${web.readCount ? ` · ${web.readCount} pages read live` : ''}: ${web.sources.slice(0, 4).map((x) => x.title).join(' · ')}`
         : `"${query}" → no results, answering from model knowledge`;
       emitAgent({ ...a });
     } catch (e) {

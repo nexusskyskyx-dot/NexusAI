@@ -54,6 +54,52 @@ app.get('/api/providers', (_req, res) => {
   res.json(serializeProviders());
 });
 
+// GET /api/fetch?url=… — LIVE page fetching for the Researcher agent.
+// Reads any http(s) page server-side (no CORS limits on self-hosted
+// instances), strips it to readable text and returns it.
+function htmlToText(html) {
+  return String(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|tr|section|article|header|footer)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n\s*\n+/g, '\n\n')
+    .trim();
+}
+
+app.get('/api/fetch', async (req, res) => {
+  const url = String(req.query.url || '');
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'http(s) URL required' });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 9000);
+  try {
+    const r = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; NexusAI-Researcher/1.0)', accept: 'text/html,application/json,text/plain;q=0.9,*/*;q=0.5' },
+      redirect: 'follow',
+    });
+    const ct = r.headers.get('content-type') || '';
+    const raw = await r.text();
+    const text = /json/i.test(ct) ? raw.slice(0, 16000) : htmlToText(raw);
+    res.json({ ok: r.ok, status: r.status, url, contentType: ct, text: text.slice(0, 12000) });
+  } catch (e) {
+    res.status(502).json({ error: `fetch failed: ${e?.message || e}` });
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 // POST /api/proxy — body: { provider, apiKey?, body }  (body is provider-native)
 app.post('/api/proxy', async (req, res) => {
   const { provider, apiKey, body } = req.body || {};
