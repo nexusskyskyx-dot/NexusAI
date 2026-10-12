@@ -56,6 +56,7 @@ export const storage = {
       accent: 'platinum',
       mode: 'team', // 'solo' | 'team' | 'image'
       transport: 'auto', // 'auto' | 'direct' | 'proxy'
+      web: true, // 🌐 Researcher: search the web before answering
       temperature: 0.7,
       maxTokens: 4000,
       planner: true,

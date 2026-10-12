@@ -4,6 +4,7 @@ import { PROVIDERS } from '@shared/providers.js';
 import { IconAgents, IconBolt, IconBrain, IconEye, IconSparkle, IconTrash } from './Icons.jsx';
 
 const STAGES = [
+  { icon: <span style={{ fontSize: 20 }}>🌐</span>, name: 'RESEARCHER', desc: 'Before anyone thinks, the Researcher searches the web — Wikipedia for knowledge, DuckDuckGo for quick answers, GitHub for open-source references — and feeds what it learns to every agent. Toggle it with the 🌐 Web button under the chat composer.' },
   { icon: <IconBolt size={20} />, name: 'PLANNER', desc: 'Reads your request and writes a tight brief: goal, requirements, approach, style.' },
   { icon: <IconAgents size={20} />, name: 'DRAFTERS', desc: 'Up to 4 different models (DeepSeek, Qwen, Claude, GPT…) answer in parallel, each following the brief.' },
   { icon: <IconEye size={20} />, name: 'REVIEWER', desc: 'Compares every draft, picks the strongest and writes a merge plan: keep, fix, add.' },

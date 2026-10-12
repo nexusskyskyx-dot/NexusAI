@@ -31,7 +31,8 @@ Every specialist has **its own prompt** (job + toolbox) — watch the whole stor
 
 ## ✨ Features
 
-- **Multi-agent team mode** — a Planner writes a brief, up to 4 drafters (different models) compete in parallel, a Reviewer picks the winner, and a Synthesizer ships the final answer. Watch it all live in the **Agent Pipeline** panel.
+- **Web research (smarter agents)** 🌐 — before anyone thinks, a **Researcher** agent searches the open web — **Wikipedia** for encyclopedic knowledge, **DuckDuckGo** for instant answers & related topics, and **GitHub** for open-source references on code/tech queries — then distills what it found into a knowledge block that is injected into every agent's prompt. Sources appear as chips on the answer. Works in chat (solo + team) and project mode; toggle it with the **🌐 Web** button under the composer. All sources are free, keyless and called straight from your browser.
+- **Multi-agent team mode** — a Researcher (optional) gathers web knowledge, a Planner writes a brief, up to 4 drafters (different models) compete in parallel, a Reviewer picks the winner, and a Synthesizer ships the final answer. Watch it all live in the **Agent Pipeline** panel.
 - **Project mode** ⭐ — a **Friend** agent greets you with ideas (or take your own). The room has exactly two sections: **Chat** (you talk, the team narrates) and **View Project** (Preview / Files / Report / Team tabs). Behind it: 🧠 Coordinator plans, 🎨 Designer + 💻 Coder stream every file into the explorer, 🧪 Tester hunts bugs with line numbers, 🔬 **Verifier** (tester 2) independently confirms or dismisses each report, 🔧 Debugger patches only the confirmed ones, the Tester **re-tests until everything passes**, then 📝 Documenter and ⚡ Optimizer ship the report + one-click **ZIP**. Works fully offline via the demo team.
 - **Every agent has its own prompt & tools** — each specialist runs on a dedicated system prompt that declares its job and its toolbox (`analyze_idea`, `write_file`, `run_checks`, `verify_bug`, `patch_file`, `write_readme`, `perf_audit`…). The tool calls are visible live in the chat and in the **Team** tab, which shows the full roster with each agent's job description and tools.
 - **Upgrade loop** ♻️ — a finished project isn't the end. Type any request in the project room's footer ("add sound effects", "make it mobile friendly", "polish the design") or tap a quick chip: the team **re-plans which files to touch**, rewrites them, re-tests and re-debugging patches, bumps the version and logs every change to an **upgrade changelog**. Every upgrade is incremental — existing content is preserved and only the requested parts change.
@@ -94,7 +95,8 @@ Add keys in **Keys & Models** inside the app (stored in your browser), or set th
 
 ## 🧠 How the team works
 
-1. **Planner** reads your request and writes a brief (goal / requirements / approach / style).
+0. **Researcher** 🌐 *(optional, on by default)* — searches Wikipedia, DuckDuckGo and GitHub for your question and hands the knowledge to every agent below.
+1. **Planner** reads your request (plus the web knowledge) and writes a brief (goal / requirements / approach / style).
 2. **Drafters** — up to 4 different models — each write a full answer in parallel (staggered to dodge free-tier rate limits). *If one fails, it automatically switches to another available model.*
 3. **Reviewer** compares drafts, picks the strongest, and writes a merge plan.
 4. **Synthesizer** fuses the best draft with the review notes and streams the final answer.
@@ -108,7 +110,8 @@ shared/providers.js   Provider registry — 16 chat providers (11 free paths) + 
 server/index.js       Express: static hosting + /api proxy + health
 server/demo.js        Offline demo model (test everything with zero setup)
 src/lib/ai.js         Transport layer: direct-browser ⇄ proxy, SSE parsing
-src/lib/engine.js     Multi-agent orchestrator with automatic failover
+src/lib/engine.js     Multi-agent orchestrator with automatic failover + web research stage
+src/lib/websearch.js  Researcher toolbox — Wikipedia + DuckDuckGo + GitHub (free, keyless, browser-direct)
 src/lib/projects.js   Project pipeline: Coordinator → Designer/Coder → Tester → Verifier → Debugger → re-test → Docs → Report + upgrade loop (each agent: own prompt + tools; chat transcript)
 src/lib/zip.js        Zero-dependency ZIP writer (project export)
 src/lib/images.js     Image generation (Pollinations + OpenAI images)

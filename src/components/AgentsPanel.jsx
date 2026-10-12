@@ -3,13 +3,14 @@ import { useStore, actions } from '../store.js';
 import { IconX, IconChevron, IconBolt, IconAgents, IconBrain } from './Icons.jsx';
 
 const STAGES = [
+  { id: 'research', label: 'WEB', desc: 'Researcher searches the web' },
   { id: 'plan', label: 'PLAN', desc: 'Planner writes the brief' },
   { id: 'draft', label: 'DRAFT', desc: 'Models answer in parallel' },
   { id: 'review', label: 'REVIEW', desc: 'Reviewer compares drafts' },
   { id: 'synthesize', label: 'SYNTH', desc: 'Final answer assembled' },
 ];
 
-const ROLE_GLYPH = { planner: '⌘', worker: '◆', critic: '☰', synth: '★' };
+const ROLE_GLYPH = { researcher: '🌐', planner: '⌘', worker: '◆', critic: '☰', synth: '★' };
 
 function AgentCard({ a }) {
   const [open, setOpen] = useState(false);

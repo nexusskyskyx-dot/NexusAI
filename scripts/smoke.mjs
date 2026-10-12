@@ -195,4 +195,59 @@ if (upUser.length < 1) throw new Error('upgrade chat missing the user message');
 if (!(doc7.chat || []).some((m) => m.id === 'up-planner' && m.done)) throw new Error('upgrade chat missing planner message');
 console.log(`    v1 content preserved + v2 patches applied ✓`);
 
+// 8 · web research — the Researcher searches the web and feeds every agent
+const { searchWeb } = await import('../src/lib/websearch.js');
+const fakeFetch = async (url) => {
+  if (url.includes('api.github.com'))
+    return { ok: true, json: async () => ({ items: [{ full_name: 'nexus/demo-app', stargazers_count: 42, description: 'a demo app', html_url: 'https://github.com/nexus/demo-app' }] }) };
+  if (url.includes('duckduckgo.com'))
+    return { ok: true, json: async () => ({ Heading: 'Pomodoro', AbstractText: 'The pomodoro technique is a time management method.', AbstractURL: 'https://ddg/pomodoro' }) };
+  if (url.includes('list=search'))
+    return { ok: true, json: async () => ({ query: { search: [{ title: 'Pomodoro Technique' }] } }) };
+  return { ok: true, json: async () => ({ query: { pages: { '1': { title: 'Pomodoro Technique', extract: 'The Pomodoro Technique uses a timer to break work into intervals.' } } } }) };
+};
+const web8 = await searchWeb('build a pomodoro timer app', { fetchImpl: fakeFetch });
+console.log(`[8] web research — ok=${web8.ok} sources=${web8.sources.length} (${web8.sources.map((s) => s.source).join(',')})`);
+if (!web8.ok || web8.sources.length < 3) throw new Error('searchWeb returned too few sources');
+if (!/Pomodoro Technique uses a timer/.test(web8.knowledge)) throw new Error('wikipedia extract missing from knowledge');
+if (!/time management method/.test(web8.knowledge)) throw new Error('duckduckgo answer missing from knowledge');
+if (!/nexus\/demo-app/.test(web8.knowledge)) throw new Error('github reference missing from knowledge');
+
+// team run with the researcher stage
+const r8 = await runTeam({
+  messages: [{ role: 'user', content: 'tell me about the pomodoro technique' }],
+  cfg: {
+    workers: [{ provider: 'demo', model: 'nexus-demo' }],
+    planner: null, critic: null,
+    synth: { provider: 'demo', model: 'nexus-demo' },
+    pool: [], keys: {},
+    settings: { transport: 'proxy', maxTokens: 400, web: true },
+    webFetch: fakeFetch,
+  },
+  cb: {},
+});
+const researcher8 = r8.agents.find((a) => a.role === 'researcher');
+console.log(`    team: researcher=${researcher8?.status} webSources=${r8.webSources?.length} final=${r8.finalText.length} chars`);
+if (researcher8?.status !== 'done') throw new Error('researcher agent did not finish');
+if (!r8.webSources?.length) throw new Error('team result missing webSources');
+if (r8.finalText.length < 100) throw new Error('team final answer missing');
+
+// project run with web knowledge
+const doc8 = await runProject({
+  idea: 'a pomodoro timer web app',
+  model: { provider: 'demo', model: 'nexus-demo' },
+  pool: [{ provider: 'demo', model: 'nexus-demo' }],
+  keys: {},
+  settings: { transport: 'proxy', temperature: 0.5, maxTokens: 900 },
+  signal: new AbortController().signal,
+  cb: {},
+  web: true,
+  webFetch: fakeFetch,
+});
+const resMsg8 = (doc8.chat || []).find((m) => m.id === 'researcher');
+console.log(`    project: stage0=${doc8.stages[0]} researcherMsg=${resMsg8 ? 'yes' : 'no'} sources=${resMsg8?.sources?.length || 0}`);
+if (doc8.stages[0] !== 'research') throw new Error('project missing research stage');
+if (!resMsg8 || !resMsg8.sources?.length) throw new Error('project chat missing researcher sources');
+if (doc8.status !== 'done') throw new Error('project with web research did not finish');
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

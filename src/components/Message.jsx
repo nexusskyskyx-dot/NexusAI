@@ -222,6 +222,17 @@ export default function Message({ msg, isLast }) {
       <TeamBadge msg={msg} />
       <Reasoning text={msg.reasoning} />
 
+      {msg.sources?.length ? (
+        <div className="msg-sources">
+          <span className="msg-sources-label">🌐 searched the web</span>
+          {msg.sources.slice(0, 6).map((src, i) => (
+            <a key={i} className="msrc" href={src.url} target="_blank" rel="noreferrer" title={src.title}>
+              {src.source === 'github' ? '⭑' : src.source === 'wikipedia' ? '📚' : '🦆'} {src.title}
+            </a>
+          ))}
+        </div>
+      ) : null}
+
       {msg.kind === 'image' ? (
         msg.images?.length ? (
           <div className={`img-grid n${Math.min(msg.images.length, 4)}`}>

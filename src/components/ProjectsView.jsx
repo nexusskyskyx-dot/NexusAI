@@ -222,6 +222,15 @@ function ChatMsg({ m }) {
           </ul>
         ) : null}
         {m.md ? <div className="md pc-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.md) }} /> : null}
+        {m.sources?.length ? (
+          <div className="pc-sources">
+            {m.sources.slice(0, 6).map((src, i) => (
+              <a key={i} className="msrc" href={src.url} target="_blank" rel="noreferrer" title={src.title}>
+                {src.source === 'github' ? '⭑' : src.source === 'wikipedia' ? '📚' : '🦆'} {src.title}
+              </a>
+            ))}
+          </div>
+        ) : null}
         {m.tools?.length ? (
           <div className="pc-tools">
             {m.tools.map((t) => (

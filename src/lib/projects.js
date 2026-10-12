@@ -23,8 +23,10 @@
 import { streamChat, friendlyError } from './ai.js';
 import { modelLabel } from '@shared/providers.js';
 import { CONSOLE_SHIM } from './preview.js';
+import { searchWeb } from './websearch.js';
 
 export const PROJECT_STAGES = [
+  { id: 'research', label: 'Research', glyph: '🌐', desc: 'Researcher searches the web for knowledge & ideas' },
   { id: 'plan', label: 'Plan', glyph: '🧠', desc: 'Coordinator analyzes the idea & plans the files' },
   { id: 'build', label: 'Build', glyph: '💻', desc: 'Designer & Coder write every file' },
   { id: 'test', label: 'Test', glyph: '🧪', desc: 'Tester 1 hunts for bugs' },
@@ -67,6 +69,11 @@ export const ROLE_META = {
     glyph: '🔧', name: 'Debugger',
     job: 'Patches only the bugs the Verifier confirmed',
     tools: ['patch_file'],
+  },
+  researcher: {
+    glyph: '🌐', name: 'Researcher',
+    job: 'Searches the web for knowledge, facts and ideas before the team plans',
+    tools: ['search_web', 'read_sources', 'summarize'],
   },
   documenter: {
     glyph: '📝', name: 'Documenter',
@@ -310,7 +317,7 @@ const fileBlocks = (files, max = 4000) =>
 // runProject({ idea, model:{provider,model}, pool, keys, settings, signal, cb })
 // cb.onDoc(fields) receives shallow doc patches (throttle-friendly).
 // Returns the final doc snapshot.
-export async function runProject({ idea, model, pool, keys, settings, signal, cb }) {
+export async function runProject({ idea, model, pool, keys, settings, signal, cb, web, webFetch }) {
   const temp = typeof settings?.temperature === 'number' ? settings.temperature : 0.7;
   const maxTokens = settings?.maxTokens || 4000;
 
@@ -350,6 +357,39 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
   // 👤 the user's request opens the chat
   say({ id: 'u0', kind: 'user', text: String(idea).slice(0, 600) });
 
+  // ── 0 · RESEARCHER (search_web) — optional web knowledge for the whole team
+  let knowledge = '';
+  if (web) {
+    stage('research');
+    emit({ status: 'researching' });
+    say({ id: 'researcher', kind: 'agent', role: 'researcher', text: 'Searching the web for knowledge & ideas…', tools: ROLE_META.researcher.tools });
+    const rAgent = {
+      id: 'researcher', role: 'researcher', name: 'Researcher',
+      provider: 'web', model: 'search', status: 'running', text: '', ms: 0, note: null,
+    };
+    emitAgent({ ...rAgent });
+    const t0 = performance.now();
+    try {
+      const w = await searchWeb(String(idea), { signal, fetchImpl: webFetch });
+      knowledge = w.ok ? w.knowledge : '';
+      emitAgent({ ...rAgent, status: 'done', ms: Math.round(performance.now() - t0), text: w.ok ? `${w.sources.length} sources` : 'no results' });
+      say({
+        id: 'researcher',
+        kind: 'agent',
+        role: 'researcher',
+        text: w.ok ? `Found ${w.sources.length} sources for the project:` : 'No web results — planning from model knowledge.',
+        tools: ROLE_META.researcher.tools,
+        sources: w.sources.map((s) => ({ source: s.source, title: s.title, url: s.url })),
+        done: true,
+      });
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      emitAgent({ ...rAgent, status: 'error', error: friendlyError(e), ms: Math.round(performance.now() - t0) });
+      say({ id: 'researcher', kind: 'agent', role: 'researcher', text: 'Web search unavailable — planning from model knowledge.', tools: ROLE_META.researcher.tools, done: true });
+    }
+  }
+  const knowledgeBlock = knowledge ? `\n\nWEB KNOWLEDGE (researched for this project):\n${knowledge.slice(0, 3500)}\n` : '';
+
   // ── 1 · COORDINATOR (analyze_idea + plan_files) ────────────────────────────
   stage('plan');
   say({ id: 'coordinator', kind: 'agent', role: 'coordinator', text: 'Analyzing the idea…', tools: ROLE_META.coordinator.tools });
@@ -359,7 +399,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
       id: 'coordinator',
       role: 'coordinator',
       system: SYS.coordinator,
-      user: `PROJECT IDEA:\n${String(idea).slice(0, 2000)}`,
+      user: `PROJECT IDEA:\n${String(idea).slice(0, 2000)}${knowledgeBlock}`,
       temperature: 0.3,
       maxTokens: 900,
     });
@@ -412,6 +452,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
           `PROJECT: ${doc.title} — ${doc.description}\n` +
           `PROJECT FILE: ${f.path}\n\n` +
           `Planned files:\n${plan.files.map((p) => `- ${p.path} — ${p.purpose || ''}`).join('\n')}\n\n` +
+          (knowledge ? `Project knowledge from the web (use for accurate details, naming and features):\n${knowledge.slice(0, 1800)}\n\n` : '') +
           (siblings ? `Already written files:\n${siblings}\n\n` : '') +
           `Write the complete content of "${f.path}" now. Output ONLY the raw file content — no markdown fences, no explanations.`,
         temperature: temp,
@@ -700,7 +741,7 @@ Markdown:
 - one line on re-test results
 Under 120 words. No fences.`;
 
-export async function upgradeProject({ project, request, model, pool, keys, settings, signal, cb }) {
+export async function upgradeProject({ project, request, model, pool, keys, settings, signal, cb, web, webFetch }) {
   const ask = makeAsk({ model, pool, keys, settings, signal, onAgent: (a) => emitAgent(a) });
   const filesMap = new Map(
     (project.files || []).filter((f) => f.content).map((f) => [f.path, { ...f, status: 'done' }])
@@ -720,6 +761,37 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
 
   emit({ status: 'upgrading', upgradeNote: '🧠 Planning the upgrade…' });
   say({ id: 'u' + version, kind: 'user', text: String(request).slice(0, 600) });
+
+  // ── 0 · RESEARCHER — web knowledge for the upgrade (optional) ─────────────
+  let knowledge = '';
+  if (web) {
+    say({ id: 'up-researcher', kind: 'agent', role: 'researcher', text: 'Searching the web…', tools: ROLE_META.researcher.tools });
+    const rAgent = {
+      id: 'up-researcher', role: 'researcher', name: 'Researcher',
+      provider: 'web', model: 'search', status: 'running', text: '', ms: 0, note: null,
+    };
+    emitAgent({ ...rAgent });
+    const t0 = performance.now();
+    try {
+      const w = await searchWeb(String(request), { signal, fetchImpl: webFetch });
+      knowledge = w.ok ? w.knowledge : '';
+      emitAgent({ ...rAgent, status: 'done', ms: Math.round(performance.now() - t0), text: w.ok ? `${w.sources.length} sources` : 'no results' });
+      say({
+        id: 'up-researcher',
+        kind: 'agent',
+        role: 'researcher',
+        text: w.ok ? `Found ${w.sources.length} sources:` : 'No web results — applying model knowledge.',
+        tools: ROLE_META.researcher.tools,
+        sources: w.sources.map((s) => ({ source: s.source, title: s.title, url: s.url })),
+        done: true,
+      });
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      emitAgent({ ...rAgent, status: 'error', error: friendlyError(e), ms: Math.round(performance.now() - t0) });
+      say({ id: 'up-researcher', kind: 'agent', role: 'researcher', text: 'Web search unavailable — applying model knowledge.', tools: ROLE_META.researcher.tools, done: true });
+    }
+  }
+
   say({ id: 'up-planner', kind: 'agent', role: 'coordinator', text: `Planning the upgrade to v${version}…`, tools: ROLE_META.coordinator.tools });
 
   // ── 1 · plan the change set ────────────────────────────────────────────────
@@ -730,7 +802,7 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
       id: 'up-planner',
       role: 'coordinator',
       system: SYS_UPGRADE_PLANNER,
-      user: `UPGRADE REQUEST: ${String(request).slice(0, 600)}\n\nPROJECT: ${project.title} — ${project.description}\nCURRENT FILES:\n${fileList}`,
+      user: `UPGRADE REQUEST: ${String(request).slice(0, 600)}\n\nPROJECT: ${project.title} — ${project.description}\nCURRENT FILES:\n${fileList}${knowledge ? `\n\nWEB KNOWLEDGE (researched for this upgrade — use for accurate details and best practices):\n${knowledge.slice(0, 2500)}` : ''}`,
       temperature: 0.3,
       maxTokens: 700,
     });
@@ -781,6 +853,7 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
         user:
           `PROJECT: ${project.title}\nUPGRADE REQUEST: ${String(request).slice(0, 400)}\n` +
           `FILE: ${ch.path} (${ch.action})\nINSTRUCTION: ${ch.instruction || String(request).slice(0, 300)}\n\n` +
+          (knowledge ? `WEB KNOWLEDGE for this change:\n${knowledge.slice(0, 1500)}\n\n` : '') +
           (current ? `---CURRENT FILE CONTENT---\n${current.slice(0, 9000)}\n---END CURRENT FILE CONTENT---\n\n` : '') +
           `Output ONLY the complete ${ch.action === 'add' ? 'new file' : 'updated file'} content.`,
         temperature: 0.5,

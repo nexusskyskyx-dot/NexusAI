@@ -6,6 +6,7 @@ import { storage, uid } from '@lib/storage.js';
 import { streamChat, friendlyError } from '@lib/ai.js';
 import { generateImage, IMAGE_ASPECTS } from '@lib/images.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
+import { searchWeb } from '@lib/websearch.js';
 import { runProject, upgradeProject as runUpgrade } from '@lib/projects.js';
 import { modelLabel, getProvider, getModel, PROVIDERS } from '@shared/providers.js';
 
@@ -329,11 +330,24 @@ async function generate(convId, history) {
     } else if (mode === 'solo') {
       let text = '';
       let reasoning = '';
+      // 🌐 Researcher — web knowledge before the model answers
+      let soloSystem = SYSTEMS.solo;
+      if (settings.web !== false) {
+        try {
+          const web = await searchWeb(history[history.length - 1]?.content || '', { signal });
+          if (web.ok) {
+            soloSystem += `\n\n${web.knowledge}`;
+            queueStreamPatch(convId, msg.id, { sources: web.sources.map((s) => ({ source: s.source, title: s.title, url: s.url })) });
+          }
+        } catch (e) {
+          if (e?.name === 'AbortError') throw e;
+        }
+      }
       const r = await streamChat({
         provider: solo.provider,
         model: solo.model,
         messages: history,
-        system: SYSTEMS.solo,
+        system: soloSystem,
         temperature: settings.temperature,
         maxTokens: settings.maxTokens,
         apiKey: keys[solo.provider],
@@ -384,6 +398,7 @@ async function generate(convId, history) {
         reasoning: result.finalReasoning,
         stats: result.stats,
         verdict: result.verdict,
+        sources: result.webSources?.length ? result.webSources.map((s) => ({ source: s.source, title: s.title, url: s.url })) : undefined,
       });
       setState((s) => ({
         runs: [
@@ -531,6 +546,7 @@ async function startProject(idea) {
       settings: state.settings,
       signal: projectCtl.signal,
       cb: { onDoc: emit },
+      web: state.settings.web !== false,
     });
   } catch (e) {
     if (e?.name === 'AbortError') updateProject(pid, { status: 'stopped' });
@@ -572,6 +588,7 @@ async function startUpgrade(request) {
       settings: state.settings,
       signal: projectCtl.signal,
       cb: { onDoc: emit },
+      web: state.settings.web !== false,
     });
     toast(`Project upgraded to v${(state.projects.find((p) => p.id === pid)?.version) || 2} ✓`);
   } catch (e) {

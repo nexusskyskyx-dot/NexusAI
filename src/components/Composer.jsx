@@ -111,6 +111,14 @@ export default function Composer() {
             </button>
           </div>
 
+          <button
+            className={`mode-btn web-toggle ${s.settings.web !== false ? 'on' : ''}`}
+            onClick={() => actions.setSettings({ web: s.settings.web === false })}
+            title="Researcher agent — searches the web (Wikipedia, DuckDuckGo, GitHub) and feeds the knowledge to every agent before they answer"
+          >
+            🌐 Web{mode === 'image' ? '' : ''}
+          </button>
+
           {mode === 'solo' ? (
             <ModelPicker value={s.solo} onChange={(v) => actions.setSolo(v)} />
           ) : mode === 'image' ? (

@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { streamChat, ApiError, friendlyError } from './ai.js';
 import { modelLabel } from '@shared/providers.js';
+import { searchWeb } from './websearch.js';
 
 const ROLE_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
@@ -171,6 +172,35 @@ export async function runTeam({ messages, cfg, cb, signal }) {
   const workerSlots = (cfg.workers || []).filter((w) => w && w.model);
   const used = [...workerSlots];
 
+  // ── 0 · RESEARCH the web (optional — makes every agent smarter) ───────────
+  let web = null;
+  if (s.web !== false) {
+    cb.onStage?.({ stage: 'research', label: 'RESEARCHING' });
+    const a = mk('researcher', 'researcher', 'Researcher');
+    a.status = 'running';
+    a.provider = 'web';
+    a.model = 'search';
+    emitAgent(a);
+    const t0 = performance.now();
+    try {
+      web = await searchWeb(userText, { signal, fetchImpl: cfg.webFetch });
+      a.status = 'done';
+      a.ms = Math.round(performance.now() - t0);
+      a.text = web.ok
+        ? `${web.sources.length} sources: ${web.sources.slice(0, 4).map((x) => x.title).join(' · ')}`
+        : 'offline — no results, answering from model knowledge';
+      emitAgent({ ...a });
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      a.status = 'error';
+      a.error = friendlyError(e);
+      emitAgent({ ...a });
+    }
+  }
+  const webBlock = web?.ok
+    ? `--- WEB KNOWLEDGE (researched by the Researcher agent) ---\n${web.knowledge}\n--- END WEB KNOWLEDGE ---\n\n`
+    : '';
+
   // ── 1 · PLAN ───────────────────────────────────────────────────────────────
   let brief = '';
   if (cfg.planner && s.planner !== false && cfg.planner.model) {
@@ -187,7 +217,9 @@ export async function runTeam({ messages, cfg, cb, signal }) {
         attempts: buildAttempts(cfg.planner, pool, used, 2),
         used,
         system: SYSTEMS.planner,
-        messages: history,
+        messages: webBlock
+          ? [...history, { role: 'user', content: `${webBlock}Weave any relevant facts, data and references into the brief.` }]
+          : history,
         keyOf: key,
         temperature: 0.4,
         maxTokens: 700,
@@ -228,8 +260,17 @@ export async function runTeam({ messages, cfg, cb, signal }) {
           attempts: buildAttempts(slot, pool, used, 3),
           used,
           system: SYSTEMS.worker(letter, modelLabel(slot.provider, slot.model)),
-          messages: brief
-            ? [...history, { role: 'user', content: `--- TEAM BRIEF (from the Planner) ---\n${brief.slice(0, 2500)}\n--- END BRIEF ---\n\nNow write your answer to the user's latest message above.` }]
+          messages: brief || webBlock
+            ? [
+                ...history,
+                {
+                  role: 'user',
+                  content:
+                    webBlock +
+                    (brief ? `--- TEAM BRIEF (from the Planner) ---\n${brief.slice(0, 2500)}\n--- END BRIEF ---\n\n` : '') +
+                    'Now write your answer to the user\'s latest message above.',
+                },
+              ]
             : history,
           keyOf: key,
           temperature: temp,
@@ -324,6 +365,7 @@ export async function runTeam({ messages, cfg, cb, signal }) {
       role: 'user',
       content:
         `The user asked:\n"""${userText.slice(0, 3000)}"""\n\n` +
+        webBlock +
         (brief ? `Team brief:\n${brief.slice(0, 2000)}\n\n` : '') +
         `BEST DRAFT (by ${best.model}) — use as your base:\n${String(best.text).slice(0, 9000)}` +
         (others.length
@@ -377,6 +419,7 @@ export async function runTeam({ messages, cfg, cb, signal }) {
     review,
     verdict,
     bestLetter: best.letter,
+    webSources: web?.ok ? web.sources : [],
     agents: agents.map((x) => ({ ...x })),
     stats: {
       drafters: drafts.length,

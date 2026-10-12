@@ -1452,3 +1452,33 @@ body {
 
 /* brand AI letters + version pills keep the platinum pop */
 .brand-ai, .mb-title b { text-shadow: 0 0 18px var(--acc-glow); }
+
+/* ── v1.8 · web research — source chips & toggle ─────────────────────────── */
+
+/* sources row on chat answers */
+.msg-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 10px; }
+.msg-sources-label {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--txt3); margin-right: 2px;
+}
+.msrc {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 230px;
+  font: 600 10.5px var(--font); color: var(--txt2); text-decoration: none;
+  background: var(--bg1); border: 1px solid var(--line); border-radius: 999px; padding: 3.5px 10px;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.msrc:hover { color: var(--acc); border-color: color-mix(in srgb, var(--acc) 40%, transparent); transform: translateY(-1px); }
+.msrc:active { transform: scale(0.96); }
+
+/* sources in the project chat */
+.pc-sources { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+
+/* the 🌐 Web toggle in the composer */
+.web-toggle { letter-spacing: 0.02em; }
+.web-toggle.on {
+  color: var(--acc);
+  border-color: color-mix(in srgb, var(--acc) 40%, transparent);
+  background: var(--acc-dim);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
