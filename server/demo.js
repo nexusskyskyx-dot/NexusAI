@@ -250,6 +250,20 @@ export function demoResponse(body) {
         bugs.push({ file: b[1], line: noisy + 1, issue: 'console.log fires on every click — noisy in production', fix: 'remove the per-click log, keep the startup log' });
       }
     }
+    // full file visibility: a file referenced by others but missing/empty is a
+    // critical bug — report it (the manifest makes state explicit)
+    const present = new Set(blocks.filter((b) => b[2].trim()).map((b) => b[1]));
+    for (const m of String(raw).matchAll(/^- (\S+) — written[^\n]*$/gm)) present.add(m[1]);
+    const missing = new Set();
+    for (const b of blocks) {
+      for (const m of b[2].matchAll(/(?:href|src)=["']([^"']+\.(?:css|m?js))["']/g)) {
+        const p = m[1].replace(/^\.\//, '');
+        if (!present.has(p)) missing.add(p);
+      }
+    }
+    for (const p of missing) {
+      bugs.push({ file: p, line: 1, issue: 'referenced by the project but MISSING or empty', fix: 'create the file or remove the reference' });
+    }
     // first test round only: one false alarm for the Verifier to catch
     if (!retest && !upgrade) {
       const css = blocks.find((b) => /\.css$/i.test(b[1]));
@@ -276,7 +290,12 @@ export function demoResponse(body) {
         }
       }
       const blk = blocks.find((b) => b[1] === r.file);
-      if (blk && /console\.log\('clicked'/.test(blk[2])) {
+      // missing-file claims: confirm when the file truly has no content
+      if (!blk || !blk[2].trim()) {
+        if (/missing|empty/i.test(r.issue)) return { file: r.file, confirmed: true, reason: 'confirmed — the file is not present in the project' };
+        return { file: r.file, confirmed: false, reason: 'could not reproduce from the file contents' };
+      }
+      if (/console\.log\('clicked'/.test(blk[2])) {
         const line = blk[2].split('\n').findIndex((l) => /console\.log\('clicked'/.test(l)) + 1;
         return { file: r.file, line, confirmed: true, reason: 'reproduced — the noisy log fires on every click' };
       }

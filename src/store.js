@@ -6,7 +6,7 @@ import { storage, uid } from '@lib/storage.js';
 import { streamChat, friendlyError } from '@lib/ai.js';
 import { generateImage, IMAGE_ASPECTS } from '@lib/images.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
-import { searchWeb } from '@lib/websearch.js';
+import { searchWeb, researchQuery } from '@lib/websearch.js';
 import { runProject, upgradeProject as runUpgrade } from '@lib/projects.js';
 import { modelLabel, getProvider, getModel, PROVIDERS } from '@shared/providers.js';
 
@@ -334,7 +334,7 @@ async function generate(convId, history) {
       let soloSystem = SYSTEMS.solo;
       if (settings.web !== false) {
         try {
-          const web = await searchWeb(history[history.length - 1]?.content || '', { signal });
+          const web = await searchWeb(researchQuery(history[history.length - 1]?.content || '', 'chat'), { signal });
           if (web.ok) {
             soloSystem += `\n\n${web.knowledge}`;
             queueStreamPatch(convId, msg.id, { sources: web.sources.map((s) => ({ source: s.source, title: s.title, url: s.url })) });

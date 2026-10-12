@@ -23,7 +23,7 @@
 import { streamChat, friendlyError } from './ai.js';
 import { modelLabel } from '@shared/providers.js';
 import { CONSOLE_SHIM } from './preview.js';
-import { searchWeb } from './websearch.js';
+import { searchWeb, researchQuery } from './websearch.js';
 
 export const PROJECT_STAGES = [
   { id: 'research', label: 'Research', glyph: '🌐', desc: 'Researcher searches the web for knowledge & ideas' },
@@ -108,6 +108,7 @@ YOUR JOB: review the project files for REAL bugs only: broken file references, J
 YOUR TOOLS (call both by filling the JSON below):
 - read_files  → you are given the full contents of every file
 - run_checks  → fill "bugs": each with file, the 1-based "line" number if you can, a one-line "issue" and a concrete "fix"
+- A file that others reference (script/link/src/href) but is MISSING or EMPTY is a CRITICAL bug — report it with file = the missing path.
 Respond ONLY valid JSON, no fences:
 {"verdict":"pass"|"issues","bugs":[{"file":"path","line":12,"issue":"…","fix":"…"}]}
 Max 3 genuine bugs. If nothing is broken, verdict is "pass" with an empty bugs array. Never invent bugs to look busy.`,
@@ -122,7 +123,7 @@ Respond ONLY valid JSON, no fences:
 "confirmed" is false when the reported bug does not actually exist in the code.`,
 
   debugger: `You are the DEBUGGER of the NexusAI project team.
-YOUR JOB: fix ONLY the confirmed bugs you receive. Touch nothing else.
+YOUR JOB: fix ONLY the confirmed bugs you receive. You are shown the whole project for context (so you can see if code is missing or inconsistent), but you must patch ONLY the affected files. Touch nothing else.
 YOUR TOOLS:
 - patch_file(path) → fill "files": every file you changed with its complete corrected content
 Respond ONLY valid JSON, no fences:
@@ -313,6 +314,32 @@ const fileBlocks = (files, max = 4000) =>
     .map((f) => `### ${f.path}\n\`\`\`\n${String(f.content).slice(0, max)}\n\`\`\``)
     .join('\n\n');
 
+// status of EVERY file — so agents instantly see what exists and what's
+// missing/empty (a referenced-but-missing file is a critical bug)
+const manifestBlock = (files) =>
+  'PROJECT MANIFEST (every file and its state):\n' +
+  files
+    .map((f) => {
+      const state = f.content
+        ? f.status === 'error'
+          ? `written but ERRORED · ${f.bytes} bytes`
+          : `written · ${f.bytes} bytes`
+        : f.status === 'writing'
+        ? 'being written…'
+        : f.status === 'error'
+        ? 'MISSING (build failed)'
+        : 'MISSING / EMPTY';
+      return `- ${f.path} — ${state}`;
+    })
+    .join('\n');
+
+// truncated view of files NOT in the focus set — full-project context
+const othersBlock = (files, focusPaths, cap = 1500) =>
+  files
+    .filter((f) => f.content && !focusPaths.includes(f.path))
+    .map((f) => `— ${f.path}:\n${String(f.content).slice(0, cap)}`)
+    .join('\n\n');
+
 // ── the runner ───────────────────────────────────────────────────────────────
 // runProject({ idea, model:{provider,model}, pool, keys, settings, signal, cb })
 // cb.onDoc(fields) receives shallow doc patches (throttle-friendly).
@@ -362,7 +389,8 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
   if (web) {
     stage('research');
     emit({ status: 'researching' });
-    say({ id: 'researcher', kind: 'agent', role: 'researcher', text: 'Searching the web for knowledge & ideas…', tools: ROLE_META.researcher.tools });
+    const query = researchQuery(String(idea), 'project');
+    say({ id: 'researcher', kind: 'agent', role: 'researcher', text: `Searching the web for “${query}”…`, tools: ROLE_META.researcher.tools });
     const rAgent = {
       id: 'researcher', role: 'researcher', name: 'Researcher',
       provider: 'web', model: 'search', status: 'running', text: '', ms: 0, note: null,
@@ -370,7 +398,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
     emitAgent({ ...rAgent });
     const t0 = performance.now();
     try {
-      const w = await searchWeb(String(idea), { signal, fetchImpl: webFetch });
+      const w = await searchWeb(query, { signal, fetchImpl: webFetch });
       knowledge = w.ok ? w.knowledge : '';
       emitAgent({ ...rAgent, status: 'done', ms: Math.round(performance.now() - t0), text: w.ok ? `${w.sources.length} sources` : 'no results' });
       say({
@@ -442,7 +470,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
     try {
       const siblings = [...filesMap.values()]
         .filter((x) => x.content && x.path !== f.path)
-        .map((x) => `— ${x.path}:\n${x.content.slice(0, 2500)}`)
+        .map((x) => `— ${x.path}:\n${x.content.slice(0, 4000)}`)
         .join('\n\n');
       const raw = await ask({
         id: 'f-' + f.path,
@@ -499,7 +527,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
       id: 'tester',
       role: 'tester',
       system: SYS.tester('first'),
-      user: `Project: ${doc.title} — ${doc.description}\n\n${fileBlocks([...filesMap.values()])}\n\nRun your checks and respond with the JSON verdict.`,
+      user: `Project: ${doc.title} — ${doc.description}\n\n${manifestBlock([...filesMap.values()])}\n\n${fileBlocks([...filesMap.values()], 6000)}\n\nRun your checks (including: is any referenced file missing or empty?) and respond with the JSON verdict.`,
       temperature: 0.2,
       maxTokens: 900,
     });
@@ -540,7 +568,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
         id: 'verifier',
         role: 'verifier',
         system: SYS.verifier,
-        user: `Project: ${doc.title}\n\nREPORTED BUGS:\n${bugList}\n\nProject files:\n${fileBlocks([...filesMap.values()])}\n\nVerify each report independently and respond with the JSON results.`,
+        user: `Project: ${doc.title}\n\nREPORTED BUGS:\n${bugList}\n\n${manifestBlock([...filesMap.values()])}\n\nProject files:\n${fileBlocks([...filesMap.values()], 6000)}\n\nVerify each report independently and respond with the JSON results.`,
         temperature: 0.2,
         maxTokens: 700,
       });
@@ -596,15 +624,17 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
     });
     try {
       const bugBlock = bugs.map((b, i) => `${i + 1}. ${b.file}${b.line ? ':' + b.line : ''}: ${b.issue}${b.fix ? ` (suggested fix: ${b.fix})` : ''}${b.reason ? ` [verifier: ${b.reason}]` : ''}`).join('\n');
+      const bugPaths = bugs.map((b) => b.file);
       const affected = [...filesMap.values()]
         .filter((f) => bugs.some((b) => b.file === f.path) && f.content)
-        .map((f) => `### ${f.path}\n\`\`\`\n${String(f.content).slice(0, 6000)}\n\`\`\``)
+        .map((f) => `### ${f.path}\n\`\`\`\n${String(f.content).slice(0, 8000)}\n\`\`\``)
         .join('\n\n');
+      const others = othersBlock([...filesMap.values()], bugPaths, 1200);
       const raw = await ask({
         id: round === 0 ? 'debugger' : 'debugger2',
         role: 'debugger',
         system: SYS.debugger,
-        user: `Project: ${doc.title}\n\nConfirmed bugs:\n${bugBlock}\n\nCurrent files:\n${affected}\n\nFix the bugs and respond with the JSON patch.`,
+        user: `Project: ${doc.title}\n\nConfirmed bugs:\n${bugBlock}\n\n${manifestBlock([...filesMap.values()])}\n\nCurrent files:\n${affected}${others ? `\n\nOTHER PROJECT FILES (context only — do not patch these):\n${others}` : ''}\n\nFix the bugs and respond with the JSON patch.`,
         temperature: 0.2,
         maxTokens,
       });
@@ -645,7 +675,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
         id: 'retest',
         role: 'tester',
         system: SYS.tester('retest'),
-        user: `Project: ${doc.title}\n\nThe Debugger just patched the project. Re-run your checks.\n\n${fileBlocks([...filesMap.values()])}\n\nRespond with the JSON verdict.`,
+        user: `Project: ${doc.title}\n\nThe Debugger just patched the project. Re-run your checks.\n\n${manifestBlock([...filesMap.values()])}\n\n${fileBlocks([...filesMap.values()], 6000)}\n\nRespond with the JSON verdict.`,
         temperature: 0.2,
         maxTokens: 700,
       });
@@ -727,7 +757,7 @@ Respond ONLY valid JSON, no fences:
 const SYS_UPGRADE_BUILDER = (path, instruction) => `You are an UPGRADE BUILDER on the NexusAI project team.
 YOUR JOB: apply this instruction to the file "${path}":
 "${instruction}"
-Preserve everything else that already works.
+Preserve everything else that already works. The other project files are given for context — keep ids, classes, selectors and references consistent with them.
 YOUR TOOLS:
 - write_file(path) → your entire response IS the updated file content
 Output ONLY the complete updated content of the file — no markdown fences, no commentary.`;
@@ -765,7 +795,8 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
   // ── 0 · RESEARCHER — web knowledge for the upgrade (optional) ─────────────
   let knowledge = '';
   if (web) {
-    say({ id: 'up-researcher', kind: 'agent', role: 'researcher', text: 'Searching the web…', tools: ROLE_META.researcher.tools });
+    const query = researchQuery(String(request), 'project');
+    say({ id: 'up-researcher', kind: 'agent', role: 'researcher', text: `Searching the web for “${query}”…`, tools: ROLE_META.researcher.tools });
     const rAgent = {
       id: 'up-researcher', role: 'researcher', name: 'Researcher',
       provider: 'web', model: 'search', status: 'running', text: '', ms: 0, note: null,
@@ -773,7 +804,7 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
     emitAgent({ ...rAgent });
     const t0 = performance.now();
     try {
-      const w = await searchWeb(String(request), { signal, fetchImpl: webFetch });
+      const w = await searchWeb(query, { signal, fetchImpl: webFetch });
       knowledge = w.ok ? w.knowledge : '';
       emitAgent({ ...rAgent, status: 'done', ms: Math.round(performance.now() - t0), text: w.ok ? `${w.sources.length} sources` : 'no results' });
       say({
@@ -846,6 +877,7 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
     say({ id: 'up-' + ch.path, kind: 'agent', role, text: `${ch.action === 'add' ? 'Creating' : 'Updating'} ${ch.path}…`, tools: ['write_file'], file: ch.path });
     try {
       const current = ch.action === 'modify' ? entry.content : '';
+      const others = othersBlock([...filesMap.values()], [ch.path], 1500);
       const raw = await ask({
         id: 'up-' + ch.path,
         role,
@@ -853,7 +885,9 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
         user:
           `PROJECT: ${project.title}\nUPGRADE REQUEST: ${String(request).slice(0, 400)}\n` +
           `FILE: ${ch.path} (${ch.action})\nINSTRUCTION: ${ch.instruction || String(request).slice(0, 300)}\n\n` +
+          `${manifestBlock([...filesMap.values()])}\n\n` +
           (knowledge ? `WEB KNOWLEDGE for this change:\n${knowledge.slice(0, 1500)}\n\n` : '') +
+          (others ? `OTHER PROJECT FILES (context — keep ids/classes/references consistent):\n${others}\n\n` : '') +
           (current ? `---CURRENT FILE CONTENT---\n${current.slice(0, 9000)}\n---END CURRENT FILE CONTENT---\n\n` : '') +
           `Output ONLY the complete ${ch.action === 'add' ? 'new file' : 'updated file'} content.`,
         temperature: 0.5,
@@ -895,13 +929,14 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
     let testReport = { verdict: 'pass', bugs: [] };
     try {
       const filesBlock = changedPaths
-        .map((p) => `### ${p}\n\`\`\`\n${String(filesMap.get(p)?.content || '').slice(0, 4000)}\n\`\`\``)
+        .map((p) => `### ${p}\n\`\`\`\n${String(filesMap.get(p)?.content || '').slice(0, 6000)}\n\`\`\``)
         .join('\n\n');
+      const others = othersBlock([...filesMap.values()], changedPaths, 1500);
       const raw = await ask({
         id: 'up-tester',
         role: 'tester',
         system: SYS.tester('upgrade'),
-        user: `Project: ${project.title}\nUPGRADE REQUEST: ${String(request).slice(0, 300)}\n\nChanged files:\n${filesBlock}\n\nRespond with the JSON verdict.`,
+        user: `Project: ${project.title}\nUPGRADE REQUEST: ${String(request).slice(0, 300)}\n\n${manifestBlock([...filesMap.values()])}\n\nChanged files:\n${filesBlock}${others ? `\n\nOTHER PROJECT FILES (context):\n${others}` : ''}\n\nRespond with the JSON verdict.`,
         temperature: 0.2,
         maxTokens: 800,
       });
@@ -925,12 +960,13 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
       // verifier pass on the upgrade's bugs
       try {
         const bugList = testReport.bugs.map((b, i) => `${i + 1}. ${b.file}${b.line ? ':' + b.line : ''} — ${b.issue}${b.fix ? ` (suggested fix: ${b.fix})` : ''}`).join('\n');
-        const blocks = changedPaths.map((p) => `### ${p}\n\`\`\`\n${String(filesMap.get(p)?.content || '').slice(0, 4000)}\n\`\`\``).join('\n\n');
+        const blocks = changedPaths.map((p) => `### ${p}\n\`\`\`\n${String(filesMap.get(p)?.content || '').slice(0, 6000)}\n\`\`\``).join('\n\n');
+        const others = othersBlock([...filesMap.values()], changedPaths, 1500);
         const raw = await ask({
           id: 'up-verifier',
           role: 'verifier',
           system: SYS.verifier,
-          user: `Project: ${project.title}\nUPGRADE REQUEST: ${String(request).slice(0, 200)}\n\nREPORTED BUGS:\n${bugList}\n\nChanged files:\n${blocks}\n\nVerify each report independently and respond with the JSON results.`,
+          user: `Project: ${project.title}\nUPGRADE REQUEST: ${String(request).slice(0, 200)}\n\nREPORTED BUGS:\n${bugList}\n\n${manifestBlock([...filesMap.values()])}\n\nChanged files:\n${blocks}${others ? `\n\nOTHER PROJECT FILES (context):\n${others}` : ''}\n\nVerify each report independently and respond with the JSON results.`,
           temperature: 0.2,
           maxTokens: 600,
         });
@@ -964,16 +1000,18 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
         try {
           const bugs = testReport.bugs.filter((b) => b.confirmed);
           const bugBlock = bugs.map((b, i) => `${i + 1}. ${b.file}${b.line ? ':' + b.line : ''}: ${b.issue}${b.fix ? ` (suggested fix: ${b.fix})` : ''}`).join('\n');
+          const bugPaths = bugs.map((b) => b.file);
           const affected = bugs
             .map((b) => filesMap.get(b.file))
             .filter((f) => f?.content)
-            .map((f) => `### ${f.path}\n\`\`\`\n${String(f.content).slice(0, 6000)}\n\`\`\``)
+            .map((f) => `### ${f.path}\n\`\`\`\n${String(f.content).slice(0, 8000)}\n\`\`\``)
             .join('\n\n');
+          const others = othersBlock([...filesMap.values()], bugPaths, 1200);
           const raw = await ask({
             id: 'up-debugger',
             role: 'debugger',
             system: SYS.debugger,
-            user: `Project: ${project.title}\nConfirmed bugs:\n${bugBlock}\n\nCurrent files:\n${affected}\n\nFix and respond with the JSON patch.`,
+            user: `Project: ${project.title}\nConfirmed bugs:\n${bugBlock}\n\n${manifestBlock([...filesMap.values()])}\n\nCurrent files:\n${affected}${others ? `\n\nOTHER PROJECT FILES (context only — do not patch these):\n${others}` : ''}\n\nFix and respond with the JSON patch.`,
             temperature: 0.2,
           });
           const fix = extractJSON(raw);

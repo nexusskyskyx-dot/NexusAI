@@ -15,7 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { streamChat, ApiError, friendlyError } from './ai.js';
 import { modelLabel } from '@shared/providers.js';
-import { searchWeb } from './websearch.js';
+import { searchWeb, researchQuery } from './websearch.js';
 
 const ROLE_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
@@ -176,19 +176,21 @@ export async function runTeam({ messages, cfg, cb, signal }) {
   let web = null;
   if (s.web !== false) {
     cb.onStage?.({ stage: 'research', label: 'RESEARCHING' });
+    const query = researchQuery(userText, 'chat');
     const a = mk('researcher', 'researcher', 'Researcher');
     a.status = 'running';
     a.provider = 'web';
     a.model = 'search';
+    a.text = `Searching: "${query}"`;
     emitAgent(a);
     const t0 = performance.now();
     try {
-      web = await searchWeb(userText, { signal, fetchImpl: cfg.webFetch });
+      web = await searchWeb(query, { signal, fetchImpl: cfg.webFetch });
       a.status = 'done';
       a.ms = Math.round(performance.now() - t0);
       a.text = web.ok
-        ? `${web.sources.length} sources: ${web.sources.slice(0, 4).map((x) => x.title).join(' · ')}`
-        : 'offline — no results, answering from model knowledge';
+        ? `"${query}" → ${web.sources.length} sources: ${web.sources.slice(0, 4).map((x) => x.title).join(' · ')}`
+        : `"${query}" → no results, answering from model knowledge`;
       emitAgent({ ...a });
     } catch (e) {
       if (e?.name === 'AbortError') throw e;

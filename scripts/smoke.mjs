@@ -250,4 +250,48 @@ if (doc8.stages[0] !== 'research') throw new Error('project missing research sta
 if (!resMsg8 || !resMsg8.sources?.length) throw new Error('project chat missing researcher sources');
 if (doc8.status !== 'done') throw new Error('project with web research did not finish');
 
+// 9 · researcher domain-matching + full file visibility
+const { researchQuery } = await import('../src/lib/websearch.js');
+const q9a = researchQuery('Make a professional portfolio', 'project');
+const q9b = researchQuery('what is a financial portfolio?', 'chat');
+const q9c = researchQuery('a neon pomodoro timer app', 'project');
+console.log(`[9] research queries — build: "${q9a}" · literal: "${q9b}" · subject: "${q9c}"`);
+if (!/web design/.test(q9a) || !/portfolio/.test(q9a)) throw new Error('portfolio did not resolve to its web-design sense');
+if (/american|money|capital|stock|invest/i.test(q9a)) throw new Error('finance sense leaked into a build query');
+if (!/financial portfolio/.test(q9b) || /web design/.test(q9b)) throw new Error('literal finance question was wrongly rewritten');
+if (!/pomodoro/.test(q9c)) throw new Error('subject lost from project query');
+
+// the demo tester must see missing referenced files (full file visibility)
+const { demoResponse } = await import('../server/demo.js');
+const t9 = JSON.parse(
+  demoResponse({
+    messages: [
+      { role: 'system', content: 'You are the TESTER of the NexusAI project team.' },
+      {
+        role: 'user',
+        content:
+          'Project: X\n\nPROJECT MANIFEST (every file and its state):\n- index.html — written · 400 bytes\n- css/style.css — MISSING / EMPTY\n\n### index.html\n```\n<link rel="stylesheet" href="css/style.css">\n<script src="js/app.js"></script>\n```\n\nRespond with the JSON verdict.',
+      },
+    ],
+  })
+);
+const missing9 = t9.bugs.filter((b) => /MISSING|empty/i.test(b.issue));
+console.log(`    missing-file detection: ${missing9.map((b) => b.file).join(', ')}`);
+if (!missing9.some((b) => b.file === 'css/style.css')) throw new Error('tester did not report the missing stylesheet');
+if (!missing9.some((b) => b.file === 'js/app.js')) throw new Error('tester did not report the missing script');
+const v9 = JSON.parse(
+  demoResponse({
+    messages: [
+      { role: 'system', content: 'You are the VERIFIER (second, independent tester) of the NexusAI project team.' },
+      {
+        role: 'user',
+        content:
+          'Project: X\n\nREPORTED BUGS:\n1. css/style.css:1 — referenced by the project but MISSING or empty\n\n### index.html\n```\n<link rel="stylesheet" href="css/style.css">\n```\n\nVerify each report independently and respond with the JSON results.',
+      },
+    ],
+  })
+);
+if (!v9.results?.[0]?.confirmed) throw new Error('verifier dismissed a genuinely missing file');
+console.log(`    verifier confirms missing files ✓`);
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

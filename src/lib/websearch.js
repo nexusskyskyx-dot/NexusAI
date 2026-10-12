@@ -120,6 +120,55 @@ async function github(query, fetchImpl, signal) {
   return out;
 }
 
+// ── domain-aware query rewriting ─────────────────────────────────────────────
+// NexusAI BUILDS web projects. When a request is about MAKING something,
+// ambiguous nouns must resolve to their web-dev sense — "make a professional
+// portfolio" means WEB DESIGN PORTFOLIOS (layouts, typography, sections), not
+// financial holdings or money capitals. The Researcher therefore searches
+// topics that GO WITH what the user is actually asking for.
+
+const AMBIGUOUS = {
+  portfolio: 'web design portfolio website',
+  resume: 'online resume portfolio design',
+  cv: 'online resume portfolio design',
+  store: 'online store web design',
+  shop: 'e-commerce web design',
+  marketplace: 'online marketplace web design',
+  bank: 'personal finance web app',
+  wallet: 'fintech web app UI',
+  blog: 'blog website design',
+  magazine: 'digital magazine web design',
+  newspaper: 'news website design',
+  restaurant: 'restaurant website design',
+  hotel: 'hotel website design',
+  gym: 'fitness web app design',
+  school: 'education website design',
+  gallery: 'online art gallery web design',
+  landing: 'landing page web design',
+};
+
+const BUILD_VERBS = /\b(make|made|create|build|design|develop|generate|write|code|draft|prototype|mock ?up|mockup)\b/i;
+const BUILD_OBJECTS = /\b(app|application|website|web ?site|web ?page|web ?app|page|site|game|clone|tool|dashboard|ui|interface|landing|frontend|front ?end)\b/i;
+const STRIP = /\b(please|can you|could you|would you|i want to|want to|i need to|need to|help me|make|made|create|build|develop|generate|write|code|a|an|the|my|me|some|for)\b/gi;
+
+// researchQuery(text, kind) — kind: 'project' (always building) | 'chat'
+// (heuristics decide). Returns the domain-matched search query.
+export function researchQuery(text, kind = 'chat') {
+  const raw = clean(text, 240);
+  if (!raw) return raw;
+  const building = kind === 'project' || BUILD_VERBS.test(raw) || BUILD_OBJECTS.test(raw);
+  if (!building) return raw; // literal question — research exactly what was asked
+  let q = raw.toLowerCase();
+  for (const [word, sense] of Object.entries(AMBIGUOUS)) {
+    q = q.replace(new RegExp(`\\b${word}\\b`, 'g'), sense);
+  }
+  q = q
+    .replace(STRIP, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return q || raw;
+}
+
 // ── the Researcher ───────────────────────────────────────────────────────────
 // searchWeb(query, { signal, fetchImpl }) →
 //   { ok, query, sources:[{source,title,url,extract}], knowledge }
