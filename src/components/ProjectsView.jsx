@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, actions } from '../store.js';
 import ModelPicker from './ModelPicker.jsx';
 import { renderMarkdown } from '@lib/markdown.js';
-import { assemblePreview, PROJECT_STAGES, ROLE_META } from '@lib/projects.js';
+import { assemblePreview, ROLE_META } from '@lib/projects.js';
 import { makeZip } from '@lib/zip.js';
 import hljs from 'highlight.js/lib/common';
 import { IconFolder, IconRocket, IconPlus, IconTrash, IconDownload, IconExternal, IconRefresh, IconCopy, IconCheck, IconTerminal, IconStop, IconSend, IconChat } from './Icons.jsx';
@@ -180,6 +180,37 @@ function StartScreen() {
 }
 
 // ── chat section ─────────────────────────────────────────────────────────────
+// completed phase → one-line title ("✓ Coded js/app.js")
+function phaseLine(m) {
+  const f = m.file ? ` ${m.file}` : '';
+  switch (m.role) {
+    case 'researcher':
+      return { title: 'Researched', obj: m.sources?.length ? `${m.sources.length} sources` : '' };
+    case 'coordinator':
+      return { title: m.id.startsWith('up-') ? 'Planned the upgrade' : 'Planned', obj: '' };
+    case 'designer':
+      return { title: 'Designed', obj: m.file || '' };
+    case 'coder':
+      return { title: 'Coded', obj: m.file || '' };
+    case 'tester':
+      if (m.id === 'retest') return { title: 'Re-tested', obj: 'all pass ✅' };
+      return { title: 'Tested', obj: m.bugs?.length ? `${m.bugs.length} issue${m.bugs.length > 1 ? 's' : ''} found` : 'all pass ✅' };
+    case 'verifier': {
+      const ok = m.results?.filter((r) => r.confirmed).length || 0;
+      const no = m.results ? m.results.length - ok : 0;
+      return { title: 'Reviewed', obj: m.results ? `${ok} confirmed${no ? ` · ${no} dismissed` : ''}` : 'verified the reports' };
+    }
+    case 'debugger':
+      return { title: 'Debugged', obj: 'patches applied 🔧' };
+    case 'documenter':
+      return { title: 'Documented', obj: 'README.md' };
+    case 'reporter':
+      return { title: 'Optimized', obj: 'code + final report ⚡' };
+    default:
+      return { title: ROLE_META[m.role]?.name || 'Done', obj: f };
+  }
+}
+
 function ChatMsg({ m }) {
   if (m.kind === 'user') {
     return (
@@ -192,59 +223,24 @@ function ChatMsg({ m }) {
     return <div className="pc-msg sys"><span>{m.text}</span></div>;
   }
   const meta = ROLE_META[m.role] || { glyph: '◆', name: m.role };
+  // while an agent is still working its bubble is HIDDEN — the live loader
+  // shows the current phase instead; it appears as a ✓ line once done
+  if (!m.done && !m.error) return null;
+  const line = phaseLine(m);
   return (
-    <div className={`pc-msg agent ${m.error ? 'err' : ''}`}>
-      <span className="pc-avatar">{meta.glyph}</span>
-      <div className="pc-body">
-        <div className="pc-name">
-          {meta.name}
-          {m.done ? null : (
-            <span className="pc-working">
-              <span className="led" /> working
-            </span>
-          )}
-        </div>
-        <div className="pc-text">{m.text}</div>
-        {m.bugs?.length ? (
-          <ul className="pc-bugs">
-            {m.bugs.map((b, i) => (
-              <li key={i}>
-                <code>{b.file}{b.line ? ':' + b.line : ''}</code> — {b.issue}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {m.results?.length ? (
-          <ul className="pc-results">
-            {m.results.map((r, i) => (
-              <li key={i} className={r.confirmed ? 'ok' : 'no'}>
-                <span className="pc-verdict">{r.confirmed ? '✓ confirmed' : '✕ dismissed'}</span>
-                <code>{r.file}{r.line ? ':' + r.line : ''}</code>
-                {r.reason ? <em>{r.reason}</em> : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {m.md ? <div className="md pc-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.md) }} /> : null}
-        {m.sources?.length ? (
-          <div className="pc-sources">
-            {m.sources.slice(0, 6).map((src, i) => (
-              <a key={i} className="msrc" href={src.url} target="_blank" rel="noreferrer" title={src.title}>
-                {src.source === 'github' ? '⭑' : src.source === 'wikipedia' ? '📚' : '🦆'} {src.title}
-              </a>
-            ))}
-          </div>
-        ) : null}
-        {m.tools?.length ? (
-          <div className="pc-tools">
-            {m.tools.map((t) => (
-              <span key={t} className="pc-tool">
-                {t}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
+    <div className={`pc-line ${m.error ? 'err' : ''}`}>
+      <span className="pc-line-glyph">{meta.glyph}</span>
+      <span className="pc-line-title">{m.error ? '⚠ ' : '✓ '}{m.error ? `${line.title} — failed` : line.title}</span>
+      {line.obj ? <span className="pc-line-obj">{line.obj}</span> : null}
+      {m.role === 'researcher' && m.sources?.length ? (
+        <span className="pc-sources">
+          {m.sources.slice(0, 4).map((src, i) => (
+            <a key={i} className="msrc" href={src.url} target="_blank" rel="noreferrer" title={src.title}>
+              {src.source === 'github' ? '⭑' : src.source === 'wikipedia' ? '📚' : '🦆'} {src.title}
+            </a>
+          ))}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -310,15 +306,16 @@ function ChatPane({ project, pane }) {
 
       <footer className="pchat-composer">
         {busy ? (
-          <div className="pchat-activity">
-            <span className="typing">
-              <i></i>
-              <i></i>
-              <i></i>
-            </span>
-            <span className="pchat-activity-text">{activity}</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => actions.stopProject()}>
-              Stop
+          <div className="pc-loader">
+            <span className="shimmer pc-loader-shimmer" />
+            <div className="pc-loader-body">
+              <span className="pc-loader-title">
+                <span className="led" /> {phase.title}…
+              </span>
+              <span className="pc-loader-sub">{phase.sub}</span>
+            </div>
+            <button className="icon-btn" onClick={() => actions.stopProject()} title="Stop the team">
+              <IconStop size={14} />
             </button>
           </div>
         ) : (
@@ -362,36 +359,6 @@ function ChatPane({ project, pane }) {
         </div>
       </footer>
     </section>
-  );
-}
-
-// ── thin progress line ───────────────────────────────────────────────────────
-function Progress({ project }) {
-  const stages = new Set(project.stages || []);
-  const map = { planning: 'plan', building: 'build', testing: 'test', verifying: 'verify', debugging: 'debug', retesting: 'retest', documenting: 'docs', reporting: 'report' };
-  const activeId = project.status === 'upgrading' ? null : map[project.status];
-  const finished = project.status === 'done';
-  return (
-    <div className="prj-progress">
-      {PROJECT_STAGES.map((st, i) => {
-        const done = finished || (stages.has(st.id) && activeId !== st.id);
-        const active = activeId === st.id;
-        return (
-          <React.Fragment key={st.id}>
-            <div className={`prj-pstep ${done ? 'done' : ''} ${active ? 'active' : ''}`} title={st.desc}>
-              <span className="prj-pdot">{done ? '✓' : active ? <span className="led" /> : i + 1}</span>
-              <span className="prj-plabel">{st.label}</span>
-            </div>
-            {i < PROJECT_STAGES.length - 1 && <span className={`prj-plink ${done ? 'on' : ''}`} />}
-          </React.Fragment>
-        );
-      })}
-      {project.status === 'upgrading' ? (
-        <span className="prj-vup">
-          <span className="led" /> upgrading to v{(project.version || 1) + 1}
-        </span>
-      ) : null}
-    </div>
   );
 }
 
@@ -518,8 +485,6 @@ function ViewPane({ project, pane }) {
           </button>
         </div>
       </header>
-
-      <Progress project={project} />
 
       <div className="pv-tabs" role="tablist">
         <button className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>

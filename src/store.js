@@ -285,7 +285,7 @@ async function generate(convId, history) {
     conversations: s.conversations.map((c) => (c.id === convId ? { ...c, messages: [...c.messages, msg] } : c)),
     streaming: true,
     streamMsg: { convId, msgId: msg.id },
-    agentsOpen: mode === 'team' ? true : s.agentsOpen,
+    agentsOpen: s.agentsOpen,
   }));
 
   abortCtl = new AbortController();

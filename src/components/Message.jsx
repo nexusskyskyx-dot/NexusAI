@@ -2,15 +2,61 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useStore, actions } from '../store.js';
 import { renderMarkdown } from '@lib/markdown.js';
 import { previewableLang, extForLang } from '@lib/preview.js';
+import { modelLabel } from '@shared/providers.js';
 import { IconCopy, IconCheck, IconRefresh, IconTrash, IconEdit, IconBrain, IconAgents, IconEye } from './Icons.jsx';
 
-const STAGE_LABELS = {
-  plan: 'Planning the approach',
-  draft: 'Drafting in parallel',
-  review: 'Reviewing the drafts',
-  synthesize: 'Synthesizing the final answer',
-  done: 'Finishing up',
+// ── work phases: what the team is doing right now ─────────────────────────────
+// while working: title + what item is being handled → after: collapsed ✓ titles
+const PHASE_DONE = { research: 'Researched', plan: 'Planned', draft: 'Drafted', review: 'Reviewed', synthesize: 'Synthesized' };
+const PHASE_NOW = { research: 'Researching', plan: 'Thinking', draft: 'Coding', review: 'Reviewing', synthesize: 'Composing' };
+const PHASE_SUB = {
+  research: 'searching the web',
+  plan: 'writing the brief',
+  draft: 'drafting answers in parallel',
+  review: 'comparing the drafts',
+  synthesize: 'assembling the final answer',
 };
+
+function WorkLog({ msg }) {
+  if (msg.mode !== 'team' || !msg.stages?.length) return null;
+  const phases = msg.stages.map((x) => x.stage).filter((x) => x !== 'done' && PHASE_DONE[x]);
+  if (!phases.length) return null;
+
+  if (msg.streaming) {
+    const active = phases[phases.length - 1];
+    const running = (msg.agents || []).filter((a) => a.status === 'running');
+    const detail = running.length
+      ? running
+          .map((a) => (a.role === 'researcher' ? '🌐 web' : a.provider === 'web' ? '🌐 web' : modelLabel(a.provider, a.model)))
+          .slice(0, 4)
+          .join(' · ')
+      : PHASE_SUB[active];
+    return (
+      <div className="worklog">
+        {phases.slice(0, -1).map((st) => (
+          <div key={st} className="wstep done">
+            ✓ {PHASE_DONE[st]}
+          </div>
+        ))}
+        <div className="wstep active">
+          <span className="wstep-title">
+            <span className="led" /> {PHASE_NOW[active]}…
+          </span>
+          <span className="wstep-sub">{detail}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // finished → one collapsed line of completed titles
+  return (
+    <button className="worksum" onClick={() => actions.setAgentsOpen(true)} title="Open the agent pipeline">
+      <IconAgents size={12} />
+      {phases.map((st) => `✓ ${PHASE_DONE[st]}`).join(' · ')}
+      {msg.ms ? <span className="worksum-ms">{(msg.ms / 1000).toFixed(1)}s</span> : null}
+    </button>
+  );
+}
 
 // Attach interactive toolbars to rendered <pre><code> blocks
 function enhanceCodeBlocks(root) {
@@ -80,32 +126,6 @@ function Reasoning({ text }) {
         <span className="reasoning-caret">{open ? '▾' : '▸'}</span>
       </button>
       {open && <pre className="reasoning-body">{text}</pre>}
-    </div>
-  );
-}
-
-function TeamBadge({ msg }) {
-  const agents = msg.agents || [];
-  const ok = agents.filter((a) => a.status === 'done');
-  const failed = agents.filter((a) => a.status === 'error');
-  if (!agents.length) return null;
-  return (
-    <div className="team-trace">
-      <button className="team-trace-btn" onClick={() => actions.setAgentsOpen(true)} title="Open agent pipeline">
-        <IconAgents size={13} />
-        <span>Agent pipeline</span>
-        <span className="team-trace-count">
-          {ok.length} ok{failed.length ? ` · ${failed.length} failed` : ''}
-        </span>
-      </button>
-      <div className="team-models">
-        {agents.map((a) => (
-          <span key={a.id} className={`team-model ${a.status === 'error' ? 'err' : a.status === 'running' ? 'run' : ''}`}>
-            {a.role === 'planner' ? '⌘ ' : a.role === 'critic' ? '☰ ' : a.role === 'synth' ? '★ ' : '◆ '}
-            {a.name}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }
@@ -190,36 +210,23 @@ export default function Message({ msg, isLast }) {
 
   return (
     <div className="msg msg-ai">
-      <div className="msg-ai-head">
-        <span className="msg-ai-brand">⬡ NEXUSAI</span>
-        {msg.mode === 'team' ? <span className="msg-ai-mode">Team</span> : null}
-        {msg.model && <span className="msg-ai-model">{msg.model}</span>}
-        {msg.streaming ? (
-          <span className="typing">
-            <i></i>
-            <i></i>
-            <i></i>
-          </span>
-        ) : null}
-        {!msg.streaming && msg.ms ? <span className="msg-ai-meta">{(msg.ms / 1000).toFixed(1)}s</span> : null}
-        {!msg.streaming && msg.content ? (
-          <span className="msg-ai-actions">
-            <button className="icon-btn" title="Copy answer" onClick={() => copy(msg.content)}>
-              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+      {!msg.streaming && msg.content ? (
+        <span className="msg-ai-float">
+          <button className="icon-btn" title="Copy answer" onClick={() => copy(msg.content)}>
+            {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+          </button>
+          {isLast && !s.streaming ? (
+            <button className="icon-btn" title="Regenerate" onClick={() => actions.regenerate(msg.id)}>
+              <IconRefresh size={13} />
             </button>
-            {isLast && !s.streaming ? (
-              <button className="icon-btn" title="Regenerate" onClick={() => actions.regenerate(msg.id)}>
-                <IconRefresh size={13} />
-              </button>
-            ) : null}
-            <button className="icon-btn" title="Delete" onClick={() => actions.deleteMessage(msg.id)}>
-              <IconTrash size={13} />
-            </button>
-          </span>
-        ) : null}
-      </div>
+          ) : null}
+          <button className="icon-btn" title="Delete" onClick={() => actions.deleteMessage(msg.id)}>
+            <IconTrash size={13} />
+          </button>
+        </span>
+      ) : null}
 
-      <TeamBadge msg={msg} />
+      <WorkLog msg={msg} />
       <Reasoning text={msg.reasoning} />
 
       {msg.sources?.length ? (
@@ -260,14 +267,14 @@ export default function Message({ msg, isLast }) {
             <span className="wait-sub">{msg.model}</span>
           </div>
         )
-      ) : empty ? (
+      ) : empty && !(msg.mode === 'team' && msg.stages?.length) ? (
         <div className="msg-ai-wait">
           <span className="shimmer" />
           <span className="wait-label">
-            {msg.mode === 'team' ? STAGE_LABELS[lastStage] || 'Assembling the team' : 'Thinking'}
+            {msg.mode === 'team' ? PHASE_NOW[lastStage] || 'Thinking' : 'Thinking'}
             <span className="wait-dots">…</span>
           </span>
-          {msg.mode === 'team' ? <span className="wait-sub">Follow the agents in the pipeline panel</span> : null}
+          <span className="wait-sub">{msg.mode === 'team' ? PHASE_SUB[lastStage] || 'preparing' : ''}</span>
         </div>
       ) : (
         <div ref={bodyRef} className={`md ${msg.streaming ? 'streaming' : ''}`} dangerouslySetInnerHTML={{ __html: html }} />

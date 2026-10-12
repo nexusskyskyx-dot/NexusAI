@@ -3,7 +3,7 @@ import { useStore, actions } from '../store.js';
 import ModelPicker from './ModelPicker.jsx';
 import { IMAGE_PROVIDERS } from '@shared/providers.js';
 import { IMAGE_ASPECTS } from '@lib/images.js';
-import { IconSend, IconStop, IconAgents, IconBolt, IconImage, IconChevron } from './Icons.jsx';
+import { IconSend, IconStop, IconAgents, IconBolt, IconImage, IconChevron, IconDownload } from './Icons.jsx';
 
 function ImageModelPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
@@ -94,7 +94,9 @@ export default function Composer() {
 
   const mode = s.settings.mode || 'team';
   const img = s.image;
-
+  const activeConv = s.conversations.find((x) => x.id === s.activeId);
+  const convHasMsgs = !!activeConv?.messages?.length;
+  const convHasTeam = !!activeConv?.messages?.some((m) => m.mode === 'team');
   return (
     <div className="composer-wrap">
       <div className="composer">
@@ -147,6 +149,40 @@ export default function Composer() {
               Configure
             </button>
           )}
+
+          <span className="composer-tools">
+            {convHasTeam ? (
+              <button className={`icon-btn ${s.agentsOpen ? 'on' : ''}`} onClick={() => actions.setAgentsOpen(!s.agentsOpen)} title="Agent pipeline">
+                <IconAgents size={14} />
+              </button>
+            ) : null}
+            {convHasMsgs ? (
+              <button
+                className="icon-btn"
+                title="Export chat as Markdown"
+                onClick={() => {
+                  const conv = s.conversations.find((x) => x.id === s.activeId);
+                  if (!conv) return;
+                  const lines = [`# ${conv.title}`, ''];
+                  for (const m of conv.messages) {
+                    lines.push(m.role === 'user' ? `## 🧑 You` : `## ⬡ Assistant${m.model ? ` · ${m.model}` : ''}`);
+                    lines.push(m.content || '(no text)');
+                    if (m.images?.length) lines.push(`> ${m.images.length} image(s) attached`);
+                    lines.push('');
+                  }
+                  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+                  const a = document.createElement('a');
+                  a.href = URL.createObjectURL(blob);
+                  a.download = 'nexusai-chat.md';
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                  actions.toast('Chat exported as Markdown ✓');
+                }}
+              >
+                <IconDownload size={14} />
+              </button>
+            ) : null}
+          </span>
 
           <div className="composer-hint">Enter ↵ send · Shift+Enter newline</div>
         </div>

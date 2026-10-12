@@ -1518,3 +1518,65 @@ body {
 .ftree-file.st-template .ftree-file-size { color: var(--warn); }
 .ftree-file.st-template .ftree-file-name { color: var(--warn); }
 .pv-code-head .pv-code-meta { white-space: nowrap; }
+
+/* ── v1.11 · quiet worklog — phases, not agent internals ────────────────── */
+
+/* chat team message: live phase log (while streaming) */
+.worklog { display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; }
+.wstep { font-family: var(--font-d); font-size: 11.5px; font-weight: 600; color: var(--txt3); }
+.wstep.done { color: var(--txt2); }
+.wstep.active { display: flex; flex-direction: column; gap: 3px; color: var(--txt); }
+.wstep-title { display: inline-flex; align-items: center; gap: 8px; }
+.wstep-title .led { background: var(--acc); box-shadow: 0 0 8px var(--acc-glow); animation: pulse 1.2s infinite; }
+.wstep-sub { font-family: var(--mono); font-size: 10px; color: var(--txt3); padding-left: 15px; }
+
+/* chat team message: collapsed summary (after done) */
+.worksum {
+  display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
+  font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--txt3);
+  background: var(--bg1); border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 12px; margin-bottom: 10px; cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+.worksum:hover { color: var(--acc); border-color: color-mix(in srgb, var(--acc) 40%, transparent); transform: translateY(-1px); }
+.worksum-ms { color: var(--txt3); font-weight: 400; }
+
+/* floating message actions (no more header row) */
+.msg-ai { position: relative; }
+.msg-ai-float {
+  position: absolute; top: 0; right: 0; display: flex; gap: 3px;
+  opacity: 0; transition: opacity 0.15s ease; z-index: 2;
+}
+.msg-ai:hover .msg-ai-float, .msg-ai:focus-within .msg-ai-float { opacity: 1; }
+@media (hover: none) { .msg-ai-float { opacity: 1; } }
+.msg-ai-float .icon-btn { width: 28px; height: 28px; border-radius: 8px; }
+
+/* composer tools (pipeline + export) */
+.composer-tools { margin-left: auto; display: flex; gap: 5px; }
+.composer-tools .icon-btn.on { color: var(--acc); border-color: color-mix(in srgb, var(--acc) 40%, transparent); background: var(--acc-dim); }
+
+/* project chat: completed phase one-liners */
+.pc-line {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  animation: fadeUp 0.2s ease; padding: 1px 2px;
+}
+.pc-line + .pc-line { margin-top: 7px; }
+.pc-line-glyph { font-size: 13px; width: 22px; height: 22px; display: grid; place-items: center; background: var(--bg1); border: 1px solid var(--line); border-radius: 7px; flex-shrink: 0; }
+.pc-line-title { font-family: var(--font-d); font-weight: 700; font-size: 12px; color: var(--txt2); }
+.pc-line-obj { font-family: var(--mono); font-size: 10px; color: var(--txt3); }
+.pc-line .pc-sources { margin-top: 0; }
+.pc-line.err .pc-line-title { color: var(--danger); }
+
+/* project chat: live phase loader */
+.pc-loader {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--acc) 22%, var(--line));
+  background: linear-gradient(160deg, var(--bg1), var(--bg));
+  border-radius: 13px; padding: 11px 12px; margin-bottom: 9px;
+  animation: fadeUp 0.2s ease;
+}
+.pc-loader-shimmer { width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0; }
+.pc-loader-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pc-loader-title { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-d); font-weight: 700; font-size: 13px; color: var(--txt); }
+.pc-loader-title .led { background: var(--acc); box-shadow: 0 0 8px var(--acc-glow); animation: pulse 1.2s infinite; }
+.pc-loader-sub { font-family: var(--mono); font-size: 10px; color: var(--txt3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

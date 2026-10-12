@@ -3,7 +3,7 @@ import { useStore, actions } from '../store.js';
 import Message from './Message.jsx';
 import Composer from './Composer.jsx';
 import AgentsPanel from './AgentsPanel.jsx';
-import { Logo, IconAgents, IconDownload, IconPlus, IconSparkle, IconCode, IconBrain, IconBolt, IconImage, IconRocket } from './Icons.jsx';
+import { Logo, IconSparkle, IconCode, IconBrain, IconBolt, IconImage, IconRocket } from './Icons.jsx';
 
 const SUGGESTIONS = [
   {
@@ -117,51 +117,10 @@ export default function ChatView() {
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
   }, [msgCount, lastContent, s.activeId]);
 
-  const exportChat = () => {
-    if (!conv?.messages.length) return;
-    const md =
-      `# ${conv.title}\n\n` +
-      conv.messages
-        .map((m) => (m.role === 'user' ? `## 🧑 You\n\n${m.content}` : `## ⬡ NexusAI (${m.mode}${m.model ? ' · ' + m.model : ''})\n\n${m.content}`))
-        .join('\n\n---\n\n');
-    const blob = new Blob([md], { type: 'text/markdown' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'nexusai-chat.md';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    actions.toast('Chat exported as Markdown ✓');
-  };
-
   const messages = conv?.messages || [];
 
   return (
     <div className="chatview">
-      <header className="chat-head">
-        <div className="chat-head-title">
-          <span className="chat-head-name">{conv?.title || 'New chat'}</span>
-          <span className="chat-head-meta">
-            {messages.length} {messages.length === 1 ? 'message' : 'messages'} ·{' '}
-            {s.settings.mode === "team" ? "Team mode" : s.settings.mode === "image" ? "Image mode" : "Solo mode"}
-          </span>
-        </div>
-        <div className="chat-head-actions">
-          {messages.some((m) => m.mode === 'team') ? (
-            <button className={`btn btn-ghost btn-sm ${s.agentsOpen ? 'on' : ''}`} onClick={() => actions.setAgentsOpen(!s.agentsOpen)}>
-              <IconAgents size={14} /> Pipeline
-            </button>
-          ) : null}
-          {messages.length ? (
-            <button className="btn btn-ghost btn-sm" onClick={exportChat} title="Export as Markdown">
-              <IconDownload size={14} /> Export
-            </button>
-          ) : null}
-          <button className="btn btn-ghost btn-sm hide-sm" onClick={() => actions.newConversation()}>
-            <IconPlus size={14} /> New
-          </button>
-        </div>
-      </header>
-
       <div className="chat-body">
         <div className="chat-scroll" ref={listRef}>
           {messages.length === 0 ? (
