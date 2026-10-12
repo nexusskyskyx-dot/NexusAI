@@ -111,7 +111,7 @@ function ProviderCard({ p }) {
             {(m.tags || []).includes('FREE') ? <b className="tag tag-free">FREE</b> : null}
           </span>
         ))}
-        {p.id === 'openrouter' ? <span className="pmodel more">+ 390 more on openrouter.ai</span> : null}
+        {p.id === 'openrouter' ? <span className="pmodel more">+ {Math.max(370, 400 - models.length)} more on openrouter.ai</span> : null}
       </div>
     </div>
   );

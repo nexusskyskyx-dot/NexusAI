@@ -617,4 +617,51 @@ console.log(`[14] easy keys — detect ✓ (.env/multi/ambiguous/exotic) · back
 }
 console.log(`[15] open air — input-first composer ✓ · slim scrollable strip ✓ · image extras separated ✓ · sources strip ✓ · mobile density rules ✓`);
 
+// 16 · OpenRouter top models — bigger curated catalog + live free-tier merge
+{
+  const { getProvider: gp16 } = await import('../shared/providers.js');
+  const { fetchLiveOpenRouter } = await import('../src/store.js');
+  const or16 = gp16('openrouter');
+  if (or16.models.length < 28) throw new Error('curated OpenRouter list too small: ' + or16.models.length);
+  const ids16 = or16.models.map((m) => m.id);
+  if (new Set(ids16).size !== ids16.length) throw new Error('duplicate OpenRouter model ids');
+  for (const m of or16.models) {
+    if (m.id.endsWith(':free') && !m.tags.includes('FREE')) throw new Error(':free model not tagged FREE — ' + m.id);
+    if (!m.label) throw new Error('model missing label — ' + m.id);
+  }
+  for (const must of ['openai/gpt-5.1', 'anthropic/claude-opus-4.5', 'google/gemini-3-pro-preview', 'moonshotai/kimi-k2:free', 'x-ai/grok-4.1', 'minimax/minimax-m2', 'deepseek/deepseek-r1-0528:free', 'z-ai/glm-4.6', 'openai/gpt-oss-20b:free']) {
+    if (!ids16.includes(must)) throw new Error('top model missing from catalog: ' + must);
+  }
+
+  // live catalog merge — keyless /api/v1/models shape, mocked
+  const realFetch16 = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      data: [
+        { id: 'deepseek/deepseek-chat-v3-0324:free', name: 'DeepSeek V3 0324 (free)', pricing: { prompt: '0', completion: '0' } }, // curated → no dupe
+        { id: 'acme/brand-new-free', name: 'Acme Brand New (free)', pricing: { prompt: '0', completion: '0' } },                  // fresh free → LIVE extra
+        { id: 'acme/paid-flagship', name: 'Acme Paid Flagship', pricing: { prompt: '0.002', completion: '0.004' } },             // paid extra → excluded
+        { id: 'acme/free-embeddings', name: 'Acme Embeddings', pricing: { prompt: '0', completion: '0' } },                      // non-chat → excluded
+      ],
+    }),
+  });
+  await fetchLiveOpenRouter();
+  globalThis.fetch = realFetch16;
+  const merged16 = renderToString(React11.createElement(() => (useStore11().liveModels.openrouter || []).map((m) => [m.id, m.label, (m.tags || []).join('.')].join('~')).join('|')))
+    .split('|')
+    .filter(Boolean)
+    .map((row) => {
+      const [id, label, tags] = row.split('~');
+      return { id, label, tags: tags ? tags.split('.') : [] };
+    });
+  if (merged16.length !== or16.models.length + 1) throw new Error('merge size wrong: ' + merged16.length);
+  const fresh16 = merged16.find((m) => m.id === 'acme/brand-new-free');
+  if (!fresh16) throw new Error('fresh free model not merged');
+  if (fresh16.label !== 'Acme Brand New' || !fresh16.tags.includes('LIVE') || !fresh16.tags.includes('FREE')) throw new Error('live extra wrong: ' + JSON.stringify(fresh16));
+  if (merged16.some((m) => m.id === 'acme/paid-flagship' || m.id === 'acme/free-embeddings')) throw new Error('paid/embed leaked into merged list');
+  if (merged16.filter((m) => m.id === 'deepseek/deepseek-chat-v3-0324:free').length !== 1) throw new Error('curated model duplicated by live fetch');
+  console.log(`[16] openrouter models — curated ${or16.models.length} (${or16.models.filter((m) => m.tags.includes('FREE')).length} free) ✓ · live merge: +LIVE free only, no dupes/paid/embed ✓ · labels cleaned ✓`);
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

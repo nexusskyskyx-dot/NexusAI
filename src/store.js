@@ -213,6 +213,34 @@ async function fetchLiveModels() {
   } catch {}
 }
 
+// OpenRouter publishes a keyless, CORS-open catalog of every model it serves.
+// Merge the freshest FREE models behind our curated top list so the free tier
+// stays current even after OpenRouter rotates models.
+export async function fetchLiveOpenRouter() {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 7000);
+    const r = await fetch('https://openrouter.ai/api/v1/models', { signal: ctl.signal });
+    clearTimeout(t);
+    const j = await r.json();
+    const list = Array.isArray(j?.data) ? j.data : [];
+    if (!list.length) return;
+    const curated = getProvider('openrouter')?.models || [];
+    const curatedIds = new Set(curated.map((m) => m.id));
+    const isFree = (m) => Number(m?.pricing?.prompt ?? 1) === 0 && Number(m?.pricing?.completion ?? 1) === 0;
+    const extras = list
+      .filter((m) => m?.id && !curatedIds.has(m.id) && isFree(m) && !/embed|whisper|tts|audio|guard|moderator|vision-only/i.test(m.id))
+      .map((m) => ({
+        id: m.id,
+        label: String(m.name || m.id).replace(/\s*\(free\)\s*$/i, '').slice(0, 40),
+        tags: ['FREE', 'LIVE'],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .slice(0, 24);
+    if (extras.length) setState({ liveModels: { ...state.liveModels, openrouter: [...curated, ...extras] } });
+  } catch {}
+}
+
 // If the live catalog renamed models, remap saved picks to valid ones
 function remapPollinations(models) {
   const ids = new Set(models.map((m) => m.id));
@@ -611,6 +639,7 @@ function boot() {
   pingServer();
   setInterval(pingServer, 45000);
   fetchLiveModels();
+  fetchLiveOpenRouter();
 }
 
 // ── actions ──────────────────────────────────────────────────────────────────
