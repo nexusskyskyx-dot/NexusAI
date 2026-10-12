@@ -1513,3 +1513,8 @@ body {
   .prj-start .prj-own-row { gap: 8px; }
   .prj-start .prj-prev { margin-top: 20px; }
 }
+
+/* ── v1.10 · no empty files — template state ─────────────────────────────── */
+.ftree-file.st-template .ftree-file-size { color: var(--warn); }
+.ftree-file.st-template .ftree-file-name { color: var(--warn); }
+.pv-code-head .pv-code-meta { white-space: nowrap; }

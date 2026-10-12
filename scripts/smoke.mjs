@@ -294,4 +294,56 @@ const v9 = JSON.parse(
 if (!v9.results?.[0]?.confirmed) throw new Error('verifier dismissed a genuinely missing file');
 console.log(`    verifier confirms missing files ✓`);
 
+// 10 · no empty files — fallback templates + resilient preview
+const { fallbackFile } = await import('../src/lib/projects.js');
+const fbHtml = fallbackFile('index.html', [{ path: 'css/style.css' }, { path: 'js/app.js' }], 'Test App');
+if (!/<\/html>/i.test(fbHtml) || !/css\/style\.css/.test(fbHtml) || !/js\/app\.js/.test(fbHtml)) throw new Error('html template must link the planned css/js');
+const fbJs = fallbackFile('js/app.js', [], 'Test App');
+if (!/addEventListener/.test(fbJs) || !/console\.log/.test(fbJs)) throw new Error('js template must be runnable');
+const fbCss = fallbackFile('css/style.css', [], 'Test App');
+if (!/body\s*\{/.test(fbCss)) throw new Error('css template must style the page');
+const pv10 = assemblePreview([
+  { path: 'css/style.css', content: 'body { background: #000; }' },
+  { path: 'js/app.js', content: "console.log('hi');" },
+]);
+if (!/<\/html>/i.test(pv10)) throw new Error('preview did not synthesize an html shell');
+if (!/<style>[\s\S]*background: #000/.test(pv10)) throw new Error('synthesized preview did not inline the css');
+if (!/console\.log\('hi'\)/.test(pv10)) throw new Error('synthesized preview did not inline the js');
+console.log(`[10] no-empty-files — templates ok · synthesized preview inlines css+js ✓`);
+
+// simulate a broken model: empty output on the first try, real code on retry
+const { finalizeEntry } = await import('../src/lib/projects.js');
+let calls11 = 0;
+const entry11 = { path: 'js/app.js', content: '', status: 'writing', bytes: 0 };
+const out11 = await finalizeEntry({
+  ask: () => {},
+  entry: entry11,
+  buildAsk: async () => (++calls11 === 1 ? '' : 'const app = 1;\nconsole.log(app); // real code\n'.repeat(3)),
+  retryNote: () => {},
+  fallbackNote: () => {},
+  say: () => {},
+  planFiles: [],
+  title: 'T',
+});
+if (out11 !== 'done' || calls11 !== 2) throw new Error('empty output was not retried');
+if (!/real code/.test(entry11.content)) throw new Error('retry content not kept');
+
+// and a totally dead model: template fallback, never an empty file
+let calls12 = 0;
+const entry12 = { path: 'index.html', content: '', status: 'writing', bytes: 0 };
+const out12 = await finalizeEntry({
+  ask: () => {},
+  entry: entry12,
+  buildAsk: async () => { calls12++; return ''; },
+  retryNote: () => {},
+  fallbackNote: () => {},
+  say: () => {},
+  planFiles: [{ path: 'css/style.css' }, { path: 'js/app.js' }],
+  title: 'Dead Model App',
+});
+if (out12 !== 'template' || calls12 !== 2) throw new Error('dead model did not fall back after retry');
+if (!entry12.content.trim() || !/<\/html>/i.test(entry12.content)) throw new Error('fallback template missing/broken');
+if (entry12.status !== 'template' || entry12.fallback !== true) throw new Error('template flags missing');
+console.log(`    empty→retry recovers ✓ · dead→template fallback ✓ (never empty)`);
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

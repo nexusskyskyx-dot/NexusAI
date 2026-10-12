@@ -211,9 +211,25 @@ function fallbackPlan(idea) {
 export function assemblePreview(files) {
   const byPath = new Map(files.filter((f) => f.content).map((f) => [f.path.replace(/^\.\//, ''), f.content]));
   let html =
-    byPath.get('index.html') ||
-    files.find((f) => /\.html?$/i.test(f.path) && f.content)?.content ||
-    '<div style="font-family:system-ui;padding:40px;color:#888">Waiting for index.html…</div>';
+    (byPath.get('index.html') || '').trim()
+      ? byPath.get('index.html')
+      : files.find((f) => /\.html?$/i.test(f.path) && f.content?.trim())?.content;
+  // no usable HTML page → synthesize a shell that links the project's real
+  // css/js so the preview still boots instead of showing nothing
+  if (!html) {
+    const css = files.find((f) => /\.css$/i.test(f.path) && f.content?.trim())?.path;
+    const js = files.find((f) => /\.m?js$/i.test(f.path) && f.content?.trim())?.path;
+    if (css || js) {
+      html =
+        `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Project preview</title>\n` +
+        (css ? `<link rel="stylesheet" href="${css}">\n` : '') +
+        `</head>\n<body>\n<main class="shell"><h1>PROJECT PREVIEW</h1><p class="tagline">No HTML page was built — showing the project's styles &amp; scripts.</p><section class="panel"><button id="go" type="button">ACTIVATE</button><p id="out" class="out"></p></section></main>\n` +
+        (js ? `<script src="${js}"></script>\n` : '') +
+        `</body>\n</html>`;
+    } else {
+      html = '<div style="font-family:system-ui;padding:40px;color:#888">Waiting for index.html…</div>';
+    }
+  }
 
   // inline <link rel=stylesheet href="…css">
   html = html.replace(/<link[^>]+href=["']([^"']+\.css)["'][^>]*>/gi, (m, href) => {
@@ -323,6 +339,8 @@ const manifestBlock = (files) =>
       const state = f.content
         ? f.status === 'error'
           ? `written but ERRORED · ${f.bytes} bytes`
+          : f.fallback || f.status === 'template'
+          ? `⚠ TEMPLATE (builder failed/empty — working placeholder, ${f.bytes} bytes)`
           : `written · ${f.bytes} bytes`
         : f.status === 'writing'
         ? 'being written…'
@@ -339,6 +357,109 @@ const othersBlock = (files, focusPaths, cap = 1500) =>
     .filter((f) => f.content && !focusPaths.includes(f.path))
     .map((f) => `— ${f.path}:\n${String(f.content).slice(0, cap)}`)
     .join('\n\n');
+
+// A real file is never smaller than this — anything less means the model
+// returned nothing useful (empty output, pure commentary, dead stream).
+const MIN_FILE_CHARS = 20;
+
+// Minimal-but-WORKING file templates. When a builder fails or returns empty,
+// these keep the project runnable (preview boots, references resolve) instead
+// of shipping broken/empty files. The user is told and can ask for an upgrade.
+export function fallbackFile(path, planFiles = [], title = 'NexusAI Project') {
+  const paths = planFiles.map((p) => (typeof p === 'string' ? p : p.path)).filter(Boolean);
+  const cssPath = paths.find((p) => /\.css$/i.test(p)) || 'css/style.css';
+  const jsPath = paths.find((p) => /\.m?js$/i.test(p)) || 'js/app.js';
+  if (/\.html?$/i.test(path)) {
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <link rel="stylesheet" href="${cssPath}" />
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <h1>${title.toUpperCase()}</h1>
+      <p class="tagline">Working placeholder — ask for an upgrade to design this page fully.</p>
+    </header>
+    <section class="panel">
+      <button id="go" type="button">ACTIVATE</button>
+      <p id="out" class="out"></p>
+    </section>
+    <footer><small>NexusAI · template</small></footer>
+  </main>
+  <script src="${jsPath}"></script>
+</body>
+</html>`;
+  }
+  if (/\.css$/i.test(path)) {
+    return `/* ${path} — working placeholder (ask for an upgrade to style it fully) */
+* { box-sizing: border-box; margin: 0; }
+body { background: #000; color: #f2f2f2; font-family: system-ui, sans-serif; min-height: 100vh; display: grid; place-items: center; }
+.shell { width: min(680px, 92vw); text-align: center; }
+h1 { font-size: clamp(30px, 6vw, 52px); font-weight: 800; letter-spacing: -0.03em; }
+h1::after { content: ''; display: block; width: 64px; height: 3px; margin: 14px auto 0; background: #dcdde2; border-radius: 2px; }
+.tagline { color: #8b8b93; margin: 14px 0 34px; font-weight: 600; }
+.panel { border: 1px solid #1d1d22; background: #09090b; border-radius: 18px; padding: 36px 26px; }
+button { background: #dcdde2; color: #0c0c0e; border: 0; border-radius: 999px; padding: 14px 34px; font-weight: 800; font-size: 15px; cursor: pointer; }
+button:active { transform: scale(.97); }
+.out { margin-top: 18px; color: #9b9ba4; font-weight: 600; min-height: 1.4em; }
+footer { margin-top: 26px; color: #4b4b52; }`;
+  }
+  if (/\.m?js$/i.test(path)) {
+    return `// ${path} — working placeholder (the model returned no code for this file)
+// Ask for an upgrade and the Coder will write the real logic.
+document.addEventListener('DOMContentLoaded', () => {
+  const out = document.getElementById('out');
+  document.getElementById('go')?.addEventListener('click', () => {
+    if (out) out.textContent = 'Hello from ${path} — ask for an upgrade to build the real logic.';
+    console.log('${path} activated');
+  });
+  console.log('${path} ready (placeholder)');
+});`;
+  }
+  if (/\.md$/i.test(path)) {
+    return `# ${title}\n\nWorking placeholder — the model returned no content for this file.\nAsk for an upgrade and the team will write it properly.\n`;
+  }
+  return `# ${path}\n\n(placeholder — the model returned no content for this file)\n`;
+}
+
+// finalize a file entry: retry once on empty, then fall back to a working
+// template. Returns 'done' | 'template'. Never leaves a file empty.
+export async function finalizeEntry({ ask, entry, buildAsk, retryNote, fallbackNote, say, planFiles, title }) {
+  let raw = '';
+  try {
+    raw = await buildAsk();
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+    entry.error = friendlyError(e);
+  }
+  entry.content = stripFences(raw);
+  if (entry.content.trim().length < MIN_FILE_CHARS) {
+    retryNote();
+    try {
+      raw = await buildAsk(true);
+      entry.content = stripFences(raw);
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      entry.error = friendlyError(e);
+    }
+  }
+  entry.bytes = entry.content.length;
+  if (entry.content.trim().length >= MIN_FILE_CHARS) {
+    entry.status = 'done';
+    entry.fallback = false;
+    return 'done';
+  }
+  entry.content = fallbackFile(entry.path, planFiles, title);
+  entry.bytes = entry.content.length;
+  entry.fallback = true;
+  entry.status = 'template';
+  fallbackNote();
+  return 'template';
+}
 
 // ── the runner ───────────────────────────────────────────────────────────────
 // runProject({ idea, model:{provider,model}, pool, keys, settings, signal, cb })
@@ -467,12 +588,12 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
     filesMap.set(f.path, entry);
     emitFiles();
     say({ id: 'f-' + f.path, kind: 'agent', role, text: `Writing ${f.path}…`, tools: ['write_file'], file: f.path });
-    try {
+    const buildAsk = (retry) => {
       const siblings = [...filesMap.values()]
         .filter((x) => x.content && x.path !== f.path)
         .map((x) => `— ${x.path}:\n${x.content.slice(0, 4000)}`)
         .join('\n\n');
-      const raw = await ask({
+      return ask({
         id: 'f-' + f.path,
         role,
         system: SYS.builder(ROLE_META[role].name, f.path),
@@ -482,6 +603,7 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
           `Planned files:\n${plan.files.map((p) => `- ${p.path} — ${p.purpose || ''}`).join('\n')}\n\n` +
           (knowledge ? `Project knowledge from the web (use for accurate details, naming and features):\n${knowledge.slice(0, 1800)}\n\n` : '') +
           (siblings ? `Already written files:\n${siblings}\n\n` : '') +
+          (retry ? `IMPORTANT: your previous attempt returned an EMPTY file. Write the COMPLETE content of "${f.path}" now — real code/markup, no placeholders, no commentary.\n` : '') +
           `Write the complete content of "${f.path}" now. Output ONLY the raw file content — no markdown fences, no explanations.`,
         temperature: temp,
         onDelta: (_d, acc) => {
@@ -491,10 +613,33 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
           say({ id: 'f-' + f.path, kind: 'agent', role, text: `Writing ${f.path}… ${(acc.length / 1024).toFixed(1)} KB`, tools: ['write_file'], file: f.path });
         },
       });
-      entry.content = stripFences(raw);
-      entry.bytes = entry.content.length;
-      entry.status = 'done';
-      built++;
+    };
+    let outcome = 'template';
+    try {
+      outcome = await finalizeEntry({
+        ask,
+        entry,
+        buildAsk,
+        retryNote: () => say({ id: 'f-' + f.path, kind: 'agent', role, text: `${f.path} came back empty — retrying…`, tools: ['write_file'], file: f.path }),
+        fallbackNote: () =>
+          say({
+            id: 'f-' + f.path,
+            kind: 'agent',
+            role,
+            text: `⚠ ${f.path} stayed empty — inserted a working template so the project still runs. Ask for an upgrade and the team will write it properly.`,
+            tools: ['write_file'],
+            file: f.path,
+            done: true,
+          }),
+        say,
+        planFiles: plan.files,
+        title: doc.title,
+      });
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+    }
+    built++; // template files count — the project always ships runnable
+    if (outcome === 'done') {
       say({
         id: 'f-' + f.path,
         kind: 'agent',
@@ -504,11 +649,6 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
         file: f.path,
         done: true,
       });
-    } catch (e) {
-      if (e?.name === 'AbortError') throw e;
-      entry.status = 'error';
-      entry.error = friendlyError(e);
-      say({ id: 'f-' + f.path, kind: 'agent', role, text: `Could not write ${f.path} — ${friendlyError(e)}`, tools: ['write_file'], file: f.path, error: true });
     }
     emitFiles();
   }
@@ -517,6 +657,17 @@ export async function runProject({ idea, model, pool, keys, settings, signal, cb
     say({ id: 'sys-err', kind: 'sys', text: '⚠ Build failed — no files could be written.' });
     return doc;
   }
+
+  // belt & braces: sweep for any remaining empty file → template
+  for (const e of filesMap.values()) {
+    if (!e.content || e.content.trim().length < MIN_FILE_CHARS) {
+      e.content = fallbackFile(e.path, plan.files, doc.title);
+      e.bytes = e.content.length;
+      e.fallback = true;
+      e.status = 'template';
+    }
+  }
+  emitFiles();
 
   // ── 3 · TESTER 1 (read_files + run_checks) ─────────────────────────────────
   stage('test');
@@ -875,10 +1026,10 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
     entry.status = 'writing';
     emitFiles();
     say({ id: 'up-' + ch.path, kind: 'agent', role, text: `${ch.action === 'add' ? 'Creating' : 'Updating'} ${ch.path}…`, tools: ['write_file'], file: ch.path });
-    try {
+    const buildAsk = (retry) => {
       const current = ch.action === 'modify' ? entry.content : '';
       const others = othersBlock([...filesMap.values()], [ch.path], 1500);
-      const raw = await ask({
+      return ask({
         id: 'up-' + ch.path,
         role,
         system: SYS_UPGRADE_BUILDER(ch.path, ch.instruction || String(request).slice(0, 300)),
@@ -889,6 +1040,7 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
           (knowledge ? `WEB KNOWLEDGE for this change:\n${knowledge.slice(0, 1500)}\n\n` : '') +
           (others ? `OTHER PROJECT FILES (context — keep ids/classes/references consistent):\n${others}\n\n` : '') +
           (current ? `---CURRENT FILE CONTENT---\n${current.slice(0, 9000)}\n---END CURRENT FILE CONTENT---\n\n` : '') +
+          (retry ? `IMPORTANT: your previous attempt returned an EMPTY file. Write the COMPLETE ${ch.action === 'add' ? 'new file' : 'updated file'} now — real code/markup, no placeholders.\n` : '') +
           `Output ONLY the complete ${ch.action === 'add' ? 'new file' : 'updated file'} content.`,
         temperature: 0.5,
         onDelta: (_d, acc) => {
@@ -898,12 +1050,54 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
           say({ id: 'up-' + ch.path, kind: 'agent', role, text: `${ch.action === 'add' ? 'Creating' : 'Updating'} ${ch.path}… ${(acc.length / 1024).toFixed(1)} KB`, tools: ['write_file'], file: ch.path });
         },
       });
-      entry.content = stripFences(raw);
-      entry.bytes = entry.content.length;
+    };
+    const prevContent = ch.action === 'modify' ? entry.content : '';
+    let outcome = 'template';
+    try {
+      outcome = await finalizeEntry({
+        ask,
+        entry,
+        buildAsk,
+        retryNote: () => say({ id: 'up-' + ch.path, kind: 'agent', role, text: `${ch.path} came back empty — retrying…`, tools: ['write_file'], file: ch.path }),
+        fallbackNote: () =>
+          say({
+            id: 'up-' + ch.path,
+            kind: 'agent',
+            role,
+            text: `⚠ ${ch.path} stayed empty — kept a working template. Try the upgrade again.`,
+            tools: ['write_file'],
+            file: ch.path,
+            done: true,
+          }),
+        say,
+        planFiles: [...filesMap.values()],
+        title: project.title,
+      });
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+    }
+    // a failed MODIFY must never destroy the previous working file — restore it
+    if (outcome === 'template' && ch.action === 'modify' && prevContent && prevContent.trim().length >= MIN_FILE_CHARS) {
+      entry.content = prevContent;
+      entry.bytes = prevContent.length;
       entry.status = 'done';
+      entry.fallback = false;
+      say({
+        id: 'up-' + ch.path,
+        kind: 'agent',
+        role,
+        text: `⚠ Could not rewrite ${ch.path} — kept the previous v${version - 1} version untouched. Try the upgrade again.`,
+        tools: ['write_file'],
+        file: ch.path,
+        done: true,
+      });
+    }
+    if (outcome === 'done') {
       entry.touched = version;
       entry.by = ROLE_META[role].name;
       changedPaths.push(ch.path);
+    }
+    if (outcome === 'done') {
       say({
         id: 'up-' + ch.path,
         kind: 'agent',
@@ -913,11 +1107,6 @@ export async function upgradeProject({ project, request, model, pool, keys, sett
         file: ch.path,
         done: true,
       });
-    } catch (e) {
-      if (e?.name === 'AbortError') throw e;
-      entry.status = 'error';
-      entry.error = friendlyError(e);
-      say({ id: 'up-' + ch.path, kind: 'agent', role, text: `Could not update ${ch.path} — ${friendlyError(e)}`, tools: ['write_file'], file: ch.path, error: true });
     }
     emitFiles();
   }

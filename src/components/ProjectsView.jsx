@@ -78,7 +78,7 @@ function TreeNode({ node, selected, onSelect, depth = 0 }) {
       {files.map((f) => (
         <button key={f.path} className={`ftree-file ${selected === f.path ? 'sel' : ''} st-${f.status}`} style={{ paddingLeft: depth * 12 + 10 }} onClick={() => onSelect(f.path)} title={f.path}>
           <span className="ftree-file-name">{f.path.split('/').pop()}{f.touched ? <em className="ftree-v">✨v{f.touched}</em> : null}</span>
-          <span className="ftree-file-size">{f.status === 'writing' ? 'writing…' : f.status === 'error' ? 'failed' : fmtBytes(f.bytes)}</span>
+          <span className="ftree-file-size">{f.status === 'writing' ? 'writing…' : f.status === 'error' ? 'failed' : f.status === 'template' ? '⚠ template' : fmtBytes(f.bytes)}</span>
         </button>
       ))}
     </div>
@@ -589,6 +589,7 @@ function ViewPane({ project, pane }) {
                       {file.content ? file.content.split('\n').length : 0} lines · {fmtBytes(file.bytes)}
                       {file.touched ? ' · ✨ v' + file.touched : ''}
                       {file.status === 'patched' ? ' · 🔧 patched' : ''}
+                      {file.fallback || file.status === 'template' ? ' · ⚠ working template' : ''}
                     </span>
                     <button className="icon-btn" onClick={copyFile} title="Copy file">
                       {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
