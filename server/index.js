@@ -176,12 +176,24 @@ app.post('/api/proxy', async (req, res) => {
   }
 });
 
-// Static frontend
-app.use(express.static(DIST));
+// Static frontend — cache strategy that prevents "stale HTML → 404 asset":
+//   /assets/*  → content-hashed filenames, safe to cache immutably forever
+//   index.html → never cached, so every deploy is picked up instantly
+app.use(
+  express.static(DIST, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+      else if (filePath.includes(`${path.sep}assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    },
+  })
+);
 app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+  if ((req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api')) {
     const index = path.join(DIST, 'index.html');
-    if (fs.existsSync(index)) return res.sendFile(index);
+    if (fs.existsSync(index)) {
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.sendFile(index);
+    }
   }
   next();
 });
