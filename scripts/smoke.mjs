@@ -584,4 +584,37 @@ if (maskKey('gsk_uiflow_test_1234567890abcd') === 'gsk_uiflow_test_1234567890abc
 A14.removeKey('groq'); A14.removeKey('openrouter'); // leave clean state
 console.log(`[14] easy keys — detect ✓ (.env/multi/ambiguous/exotic) · backup round-trip ✓ · connect flow UI ✓ (guide→hidden, check-all) · no key leak ✓`);
 
+// 15 · Open Air interface — input-first composer, slim control strip, mobile density
+{
+  A11.setView('chat');
+  A11.newConversation();
+  const html15 = renderToString(React11.createElement(App));
+  // input FIRST, controls below — the textarea must appear before the mode switch
+  const taAt = html15.indexOf('<textarea');
+  const soloAt = html15.indexOf('mode-switch');
+  if (taAt < 0 || soloAt < 0) throw new Error('composer pieces missing from render');
+  if (taAt > soloAt) throw new Error('composer is not input-first anymore');
+  // all controls still present in the slim strip
+  for (const piece of ['composer-bar', 'Team', 'Image', '🌐 Web', 'composer-tools', 'Enter ↵ send']) {
+    if (!html15.includes(piece)) throw new Error(`composer strip missing: ${piece}`);
+  }
+  // image mode extras render in their own strip (not crowding the main bar)
+  A11.setSettings({ mode: 'image' });
+  const img15 = renderToString(React11.createElement(App));
+  if (!img15.includes('composer-xtra')) throw new Error('image controls strip missing');
+  if (!/aspect-btn/.test(img15)) throw new Error('aspect buttons missing');
+  A11.setSettings({ mode: 'team' });
+
+  // CSS: mobile rules that make the density real
+  const css15 = (await import('node:fs')).readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const mobile15 = css15.slice(css15.indexOf('@media (max-width: 760px)'));
+  if (!/\.composer-bar[^}]*overflow-x:\s*auto/.test(mobile15)) throw new Error('control strip not scrollable on mobile');
+  if (!/\.composer-note\s*{\s*display:\s*none/.test(mobile15)) throw new Error('composer note not hidden on mobile');
+  if (!/\.msg-sources\s*{[^}]*flex-wrap:\s*nowrap/.test(mobile15)) throw new Error('sources not a single strip on mobile');
+  if (!/\.icon-btn\s*{[^}]*38px/.test(mobile15)) throw new Error('tap targets not sized on mobile');
+  if (!/scrollbar-width:\s*thin/.test(css15)) throw new Error('slim scrollbars missing');
+  if (!/\.composer-bar\s*{[^}]*padding:\s*0 10px 10px/.test(css15)) throw new Error('desktop bar padding wrong');
+}
+console.log(`[15] open air — input-first composer ✓ · slim scrollable strip ✓ · image extras separated ✓ · sources strip ✓ · mobile density rules ✓`);
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

@@ -100,7 +100,39 @@ export default function Composer() {
   return (
     <div className="composer-wrap">
       <div className="composer">
-        <div className="composer-top">
+        {/* v1.15 · input first — controls live in one slim strip below */}
+        <div className="composer-main">
+          <textarea
+            ref={taRef}
+            value={text}
+            placeholder={
+              mode === 'team'
+                ? 'Brief the team — the agents will collaborate on the best answer…'
+                : mode === 'image'
+                ? 'Describe the image to generate — e.g. “a neon city at night, cinematic, ultra detailed”…'
+                : 'Ask NexusAI anything…'
+            }
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            rows={1}
+          />
+          {s.streaming ? (
+            <button className="btn-stop" onClick={() => actions.stopGeneration()} title="Stop generation" aria-label="Stop generation">
+              <IconStop size={15} />
+            </button>
+          ) : (
+            <button className="btn-send" onClick={send} disabled={!text.trim()} title="Send" aria-label="Send">
+              {mode === 'image' ? <IconImage size={17} /> : <IconSend size={17} />}
+            </button>
+          )}
+        </div>
+
+        <div className="composer-bar">
           <div className="mode-switch" role="tablist">
             <button className={`mode-btn ${mode === 'solo' ? 'on' : ''}`} onClick={() => actions.setSettings({ mode: 'solo' })} title="One model answers directly">
               <IconBolt size={13} /> Solo
@@ -118,37 +150,19 @@ export default function Composer() {
             onClick={() => actions.setSettings({ web: s.settings.web === false })}
             title="Researcher agent — searches the web (Wikipedia, DuckDuckGo, GitHub) and feeds the knowledge to every agent before they answer"
           >
-            🌐 Web{mode === 'image' ? '' : ''}
+            🌐 Web
           </button>
 
           {mode === 'solo' ? (
             <ModelPicker value={s.solo} onChange={(v) => actions.setSolo(v)} />
-          ) : mode === 'image' ? (
-            <>
-              <ImageModelPicker value={img} onChange={(v) => actions.setImage(v)} />
-              <div className="aspect-row">
-                {IMAGE_ASPECTS.map((a) => (
-                  <button key={a.id} className={`aspect-btn ${img.aspect === a.id ? 'on' : ''}`} onClick={() => actions.setImage({ aspect: a.id })} title={a.label}>
-                    {a.id === '1:1' ? '◻' : a.id === '16:9' ? '▭' : '▯'}
-                  </button>
-                ))}
-              </div>
-              <div className="aspect-row">
-                {[1, 2, 4].map((n) => (
-                  <button key={n} className={`aspect-btn ${img.count === n ? 'on' : ''}`} onClick={() => actions.setImage({ count: n })} title={`${n} image${n > 1 ? 's' : ''}`}>
-                    ×{n}
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
+          ) : mode === 'team' ? (
             <button className="model-chip team-chip" onClick={() => actions.setView('agents')} title="Configure the agent squad">
               <span className="model-chip-dot" />
               {(s.squad.workers || []).filter((w) => w && w.model).length} drafters
               <span className="model-chip-sep">·</span>
               Configure
             </button>
-          )}
+          ) : null}
 
           <span className="composer-tools">
             {convHasTeam ? (
@@ -187,36 +201,25 @@ export default function Composer() {
           <div className="composer-hint">Enter ↵ send · Shift+Enter newline</div>
         </div>
 
-        <div className="composer-main">
-          <textarea
-            ref={taRef}
-            value={text}
-            placeholder={
-              mode === 'team'
-                ? 'Brief the team — the agents will collaborate on the best answer…'
-                : mode === 'image'
-                ? 'Describe the image to generate — e.g. “a neon city at night, cinematic, ultra detailed”…'
-                : 'Ask NexusAI anything…'
-            }
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            rows={1}
-          />
-          {s.streaming ? (
-            <button className="btn-stop" onClick={() => actions.stopGeneration()} title="Stop generation" aria-label="Stop generation">
-              <IconStop size={15} />
-            </button>
-          ) : (
-            <button className="btn-send" onClick={send} disabled={!text.trim()} title="Send" aria-label="Send">
-              {mode === 'image' ? <IconImage size={17} /> : <IconSend size={17} />}
-            </button>
-          )}
-        </div>
+        {mode === 'image' ? (
+          <div className="composer-xtra">
+            <ImageModelPicker value={img} onChange={(v) => actions.setImage(v)} />
+            <div className="aspect-row">
+              {IMAGE_ASPECTS.map((a) => (
+                <button key={a.id} className={`aspect-btn ${img.aspect === a.id ? 'on' : ''}`} onClick={() => actions.setImage({ aspect: a.id })} title={a.label}>
+                  {a.id === '1:1' ? '◻' : a.id === '16:9' ? '▭' : '▯'}
+                </button>
+              ))}
+            </div>
+            <div className="aspect-row">
+              {[1, 2, 4].map((n) => (
+                <button key={n} className={`aspect-btn ${img.count === n ? 'on' : ''}`} onClick={() => actions.setImage({ count: n })} title={`${n} image${n > 1 ? 's' : ''}`}>
+                  ×{n}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="composer-note">
         {mode === 'team'
