@@ -346,4 +346,92 @@ if (!entry12.content.trim() || !/<\/html>/i.test(entry12.content)) throw new Err
 if (entry12.status !== 'template' || entry12.fallback !== true) throw new Error('template flags missing');
 console.log(`    empty→retry recovers ✓ · dead→template fallback ✓ (never empty)`);
 
+// 11 · SSR render sweep — every view in every state. A render crash is a
+//     black screen for the user; this catches them all (incl. mid-run).
+globalThis.matchMedia ??= (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+globalThis.window ??= globalThis;
+const React11 = (await import('react')).default;
+const { renderToString } = await import('react-dom/server');
+const { default: App } = await import('../src/App.jsx');
+const { actions: A11, useStore: useStore11 } = await import('../src/store.js');
+const { PROVIDERS: P11 } = await import('../shared/providers.js');
+
+const errors11 = [];
+const sweep11 = (label) => {
+  try {
+    const html = renderToString(React11.createElement(App));
+    if (!html || html.length < 50) errors11.push(`${label}: empty render`);
+    else console.log(`    ✓ ${label} · ${html.length} chars`);
+  } catch (e) {
+    errors11.push(`${label}: ${e && e.message}`);
+    console.log(`    ✗ ${label}: ${e && e.message}`);
+  }
+};
+
+// force the offline demo everywhere so the sweep is deterministic
+A11.setSettings({ web: false });
+A11.setSolo({ provider: 'demo', model: 'nexus-demo' });
+A11.setSquad({
+  workers: [{ provider: 'demo', model: 'nexus-demo' }],
+  planner: { provider: 'demo', model: 'nexus-demo' },
+  critic: { provider: 'demo', model: 'nexus-demo' },
+  synth: { provider: 'demo', model: 'nexus-demo' },
+});
+A11.setPrjModel({ provider: 'demo', model: 'nexus-demo' });
+
+// start screen (wizard)
+A11.setView('projects');
+A11.openProjectWizard();
+sweep11('projects · start screen');
+
+// mid-run project — the exact state that used to black-screen
+const run11 = A11.startProject('a neon pomodoro timer app');
+await new Promise((r) => setTimeout(r, 500));
+sweep11('projects · mid-run (planning)');
+await new Promise((r) => setTimeout(r, 2500));
+sweep11('projects · mid-run (building)');
+await run11;
+sweep11('projects · finished');
+
+// chat: team message mid-stream + finished (WorkLog phases + sources)
+A11.setView('chat');
+A11.newConversation();
+A11.sendMessage('tell me about the pomodoro technique'); // fire-and-forget
+await new Promise((r) => setTimeout(r, 1500));
+sweep11('chat · team mid-stream');
+// sendMessage is fire-and-forget — poll the store until the run completes
+const Probe11 = () => {
+  const st = useStore11();
+  return st.streaming || st.projectBusy ? 'BUSY' : 'DONE';
+};
+let done11 = false;
+for (let i = 0; i < 180; i++) {
+  await new Promise((r) => setTimeout(r, 500));
+  if (renderToString(React11.createElement(Probe11)) === 'DONE') { done11 = true; break; }
+}
+if (!done11) throw new Error('chat generation did not finish in 90s');
+sweep11('chat · team finished');
+{
+  const html = renderToString(React11.createElement(App));
+  if (!html.includes('worksum')) throw new Error('finished team message missing the collapsed worklog summary');
+  if (!/pomodoro/i.test(html)) throw new Error('final answer content missing');
+}
+
+// mid-upgrade — the up-* code paths (planner/builders/re-test)
+A11.setView('projects');
+const up11 = A11.upgradeProject('add sound effects');
+await new Promise((r) => setTimeout(r, 1500));
+sweep11('projects · mid-upgrade');
+await up11;
+sweep11('projects · upgraded (v2)');
+
+// every remaining view
+for (const v of ['agents', 'canvas', 'keys']) {
+  A11.setView(v);
+  sweep11(`${v} view`);
+}
+
+if (errors11.length) throw new Error('SSR render crashes: ' + errors11.join(' | '));
+console.log(`[11] SSR render sweep — 11 states, zero crashes ✓`);
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

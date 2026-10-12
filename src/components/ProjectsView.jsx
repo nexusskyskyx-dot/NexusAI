@@ -245,6 +245,27 @@ function ChatMsg({ m }) {
   );
 }
 
+// live work phase: title + the item being handled right now
+function currentPhase(project) {
+  const running = (project.agents || []).find((a) => a.status === 'running');
+  const writing = (project.files || []).find((f) => f.status === 'writing');
+  if (writing) return { title: 'Coding', sub: `writing ${writing.path} · ${((writing.bytes || 0) / 1024).toFixed(1)} KB` };
+  if (running) {
+    const r = running.role;
+    const up = String(running.id || '').startsWith('up-');
+    if (r === 'researcher') return { title: 'Researching', sub: 'searching the web' };
+    if (r === 'coordinator') return { title: 'Thinking', sub: up ? 'planning the upgrade' : 'planning the project' };
+    if (r === 'tester') return { title: 'Testing', sub: running.id === 'retest' ? 're-checking the changes' : 'checking every file' };
+    if (r === 'verifier') return { title: 'Reviewing', sub: 'verifying the reported bugs' };
+    if (r === 'debugger') return { title: 'Debugging', sub: 'patching the confirmed bugs' };
+    if (r === 'documenter') return { title: 'Documenting', sub: 'writing README.md' };
+    if (r === 'reporter') return { title: 'Reporting', sub: 'optimizing & writing the report' };
+    return { title: 'Working', sub: running.name || '' };
+  }
+  if (project.status === 'upgrading') return { title: 'Upgrading', sub: (project.upgradeNote || 'planning the upgrade').replace(/^[^\w]+\s*/, '') };
+  return { title: 'Thinking', sub: 'preparing the next step' };
+}
+
 function ChatPane({ project, pane }) {
   const s = useStore();
   const [text, setText] = useState('');
@@ -281,9 +302,8 @@ function ChatPane({ project, pane }) {
     else actions.startProject(t);
   };
 
-  const running = project.agents?.find((a) => a.status === 'running');
-  const writing = files.find((f) => f.status === 'writing');
-  const activity = project.upgradeNote || (running ? `${running.name} is working…` : writing ? `Writing ${writing.path}…` : 'Coordinator is planning…');
+  // current work phase — title + the item being handled
+  const phase = busy ? currentPhase(project) : null;
 
   return (
     <section className={`pchat ${pane !== 'chat' ? 'pane-off' : ''}`}>
