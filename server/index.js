@@ -142,7 +142,7 @@ app.post('/api/proxy', async (req, res) => {
     });
   }
 
-  const url = reg.baseUrl;
+  const url = reg.url ? reg.url(key) : reg.baseUrl;
   const headers = { 'Content-Type': 'application/json', ...(reg.headers ? reg.headers(key) : {}) };
 
   try {

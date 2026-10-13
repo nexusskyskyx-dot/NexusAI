@@ -7,6 +7,7 @@ import { streamChat, friendlyError, forcedStreamChat } from '@lib/ai.js';
 import { IMAGE_ASPECTS } from '@lib/images.js';
 import { runImagePipeline } from '@lib/imagepipe.js';
 import { autoConfigure } from '@lib/autobest.js';
+import { completeChat as _complete } from '@lib/ai.js';
 import { detectIntent } from '@lib/intent.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
 import { searchWeb, researchQuery } from '@lib/websearch.js';
@@ -18,6 +19,7 @@ let state = {
   booted: false,
   serverOk: null, // null = checking
   envKeys: [], // provider ids with server-side env keys
+  laneHealth: {}, // zero-credit provider id → 'ok' | 'dead' (free tier died)
   keys: storage.loadKeys(),
   settings: storage.loadSettings(),
   solo: storage.loadSolo(),
@@ -699,6 +701,8 @@ function boot() {
   setInterval(pingServer, 45000);
   fetchLiveModels();
   fetchLiveOpenRouter();
+  pingFreeLanes();
+  setInterval(() => pingFreeLanes(), 60 * 60 * 1000);
 }
 
 // ── Auto-Best (v1.17): keys changed → re-select the best models everywhere.
@@ -709,6 +713,40 @@ function applyAutoBest(reason = 'keys changed') {
   setState({ solo: cfg.solo, squad: cfg.squad, prj: cfg.prj, image: cfg.image });
   schedulePersist();
   actions.toast(`⚡ Auto-configured (${reason}): ${cfg.changes.slice(0, 3).join(' · ')}${cfg.changes.length > 3 ? ' +' + (cfg.changes.length - 3) : ''}`);
+}
+
+// ── Free-lane health (v1.22): a dead free tier must demote itself before a
+// user ever hits it. Pings each connected zero-credit provider with a 1-token
+// request; only explicit auth/quota failures (401/402/403/404) mark a lane
+// dead — network hiccups leave it alone.
+export async function pingFreeLanes(complete = _complete) {
+  const { PROVIDERS: ALL } = await import('@shared/providers.js');
+  const jobs = ALL.filter((p) => p.zeroCredit && p.needsKey && hasCredential(p.id, state)).map(async (p) => {
+    try {
+      await complete({
+        provider: p.id,
+        model: p.models[0].id,
+        messages: [{ role: 'user', content: 'hi' }],
+        apiKey: state.keys[p.id],
+        maxTokens: 5,
+        transport: state.settings.transport,
+      });
+      return [p.id, 'ok'];
+    } catch (e) {
+      const dead = [401, 402, 403, 404].includes(e?.status);
+      return [p.id, dead ? 'dead' : 'unknown'];
+    }
+  });
+  const results = await Promise.all(jobs);
+  const laneHealth = { ...state.laneHealth };
+  for (const [pid, verdict] of results) {
+    if (verdict !== 'unknown') laneHealth[pid] = verdict;
+    else delete laneHealth[pid];
+  }
+  setState({ laneHealth });
+  const deadNow = results.filter(([, v]) => v === 'dead').map(([pid]) => pid);
+  if (deadNow.length) actions.toast(`⚠ Free tier ended: ${deadNow.join(', ')} — Auto-Best remapped your models`);
+  return laneHealth;
 }
 
 // ── actions ──────────────────────────────────────────────────────────────────

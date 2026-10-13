@@ -74,6 +74,7 @@ const LADDERS = {
 function bestIn(ladder, s) {
   for (const [provider, model] of ladder) {
     if (!hasCredential(provider, s)) continue;
+    if (s.laneHealth?.[provider] === 'dead') continue; // free tier died — skip it
     if (!getModel(provider, model)) continue;
     return { provider, model };
   }

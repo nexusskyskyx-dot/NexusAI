@@ -18,6 +18,7 @@ function ProviderCard({ p }) {
   const saved = !!s.keys[p.id];
   const envKeyed = !saved && (s.envKeys || []).includes(p.id);
   const available = !p.needsKey || saved || envKeyed;
+  const lane = s.laneHealth?.[p.id];
   const models = s.liveModels[p.id] || p.models;
 
   const test = async () => {
@@ -51,7 +52,7 @@ function ProviderCard({ p }) {
         </div>
         <div className={`provider-status ${available ? 'ok' : 'nokey'}`}>
           <span className="led" />
-          {available ? (p.needsKey ? (envKeyed ? 'Env key on server' : 'Key saved') : 'Ready — no key') : 'Key required'}
+          {lane === 'dead' ? '⚠ Free tier ended' : available ? (p.needsKey ? (envKeyed ? 'Env key on server' : lane === 'ok' ? 'Key saved · lane ✓' : 'Key saved') : 'Ready — no key') : 'Key required'}
         </div>
       </div>
 
@@ -67,7 +68,7 @@ function ProviderCard({ p }) {
             <input
               type={show ? 'text' : 'password'}
               value={val}
-              placeholder={saved ? 'key saved — paste a new one to replace' : p.id === 'openrouter' ? 'sk-or-v1-…' : 'paste your API key'}
+              placeholder={saved ? 'key saved — paste a new one to replace' : p.keyHint ? p.keyHint : p.id === 'openrouter' ? 'sk-or-v1-…' : 'paste your API key'}
               onChange={(e) => setVal(e.target.value)}
               spellCheck={false}
               autoComplete="off"

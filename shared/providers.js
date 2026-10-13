@@ -263,6 +263,31 @@ export const PROVIDERS = [
     ],
   },
   {
+    id: 'cloudflare',
+    name: 'Cloudflare Workers AI',
+    vendor: 'Free · 10k neurons/day',
+    kind: 'openai',
+    baseUrl: '',
+    // key format: "accountId:apiToken" — the URL is account-specific
+    url: (key) => {
+      const acct = String(key || '').split(':')[0];
+      return `https://api.cloudflare.com/client/v4/accounts/${acct}/ai/v1/chat/completions`;
+    },
+    keyHint: 'accountId:apiToken',
+    needsKey: true,
+    keyUrl: 'https://dash.cloudflare.com/?to=/:account/workers-ai',
+    direct: false,
+    free: true,
+    zeroCredit: true, // free daily neurons — the token is never billed
+    note: 'Workers AI on your Cloudflare account — 10,000 free neurons/day, no card. One key field holds both: your Account ID, a colon, then the API token (AI → Read). Llama, Mistral and Qwen served from the Cloudflare edge.',
+    headers: (key) => ({ Authorization: `Bearer ${String(key || '').split(':').slice(1).join(':') || key}` }),
+    models: [
+      { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'Llama 3.3 70B Fast', tags: ['FREE', 'FAST'] },
+      { id: '@cf/mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small 3.1', tags: ['FREE', 'SMART'] },
+      { id: '@cf/qwen/qwen2.5-coder-32b-instruct', label: 'Qwen 2.5 Coder 32B', tags: ['FREE', 'CODE'] },
+    ],
+  },
+  {
     id: 'cohere',
     name: 'Cohere',
     vendor: 'Free trial key',
@@ -467,6 +492,7 @@ export function serializeProviders() {
     direct: p.direct,
     free: !!p.free,
     zeroCredit: !!p.zeroCredit,
+    keyHint: p.keyHint || null,
     note: p.note,
     liveCatalog: p.liveCatalog || null,
     models: p.models,

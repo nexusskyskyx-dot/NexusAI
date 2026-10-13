@@ -1272,4 +1272,43 @@ function modelLabelSafeguard(p, m) {
   console.log('[28] zero-credit lanes — 9 free-lane providers flagged ✓ · metered providers excluded ✓ · api flag ✓ · lane badge renders only where true ✓');
 }
 
+// 29 · $0 mode — cloudflare lane, free-lane health, dead-tier demotion
+{
+  const { getProvider: gp29 } = await import('../shared/providers.js');
+  const { pingFreeLanes: ping29 } = await import('../src/store.js');
+  const { autoConfigure: ac29 } = await import('../src/lib/autobest.js');
+
+  // cloudflare provider: dual-credential key, dynamic url, zero-credit
+  const cf29 = gp29('cloudflare');
+  if (!cf29 || cf29.zeroCredit !== true || !cf29.free) throw new Error('cloudflare lane not free/zero-credit');
+  if (cf29.url('acct123:tok_en:with_colons') !== 'https://api.cloudflare.com/client/v4/accounts/acct123/ai/v1/chat/completions') throw new Error('cf url build wrong');
+  if (cf29.headers('acct123:tok_en:with_colons').Authorization !== 'Bearer tok_en:with_colons') throw new Error('cf header split wrong (token may contain colons)');
+  if (cf29.keyHint !== 'accountId:apiToken') throw new Error('cf key hint missing');
+
+  // pingFreeLanes (injected complete): ok / dead(402) / unknown(network) verdicts
+  A11.setKeys({ gemini: 'AIza_lane29', groq: 'gsk_lane29' });
+  const health29 = await ping29(async (o) => {
+    if (o.provider === 'groq') { const e = new Error('Payment Required'); e.status = 402; throw e; }
+    if (o.provider === 'gemini') throw new Error('network blip'); // NOT auth — must stay unknown
+    return 'ok';
+  });
+  if (health29.gemini !== undefined || health29.groq !== 'dead') throw new Error('lane verdicts wrong: ' + JSON.stringify(health29));
+  let laneState29 = null;
+  renderToString(React11.createElement(() => { laneState29 = useStore11().laneHealth; return ''; }));
+  if (laneState29.gemini !== undefined) throw new Error('network blip should not mark a lane');
+  if (laneState29.groq !== 'dead') throw new Error('live store laneHealth missing dead groq');
+
+  // dead lane is skipped by auto-best (groq dead → gemini wins despite groq ranking higher)
+  const cfg29 = ac29({ keys: { gemini: 'AIza_x', groq: 'gsk_x' }, envKeys: [], laneHealth: { groq: 'dead' }, solo: { provider: 'pollinations', model: 'openai' }, squad: { workers: [{ provider: 'pollinations', model: 'qwen-coder' }], planner: {}, critic: {}, synth: {} }, prj: {}, image: {} });
+  if (cfg29.solo.provider !== 'gemini') throw new Error('dead lane not skipped: ' + JSON.stringify(cfg29.solo));
+
+  // UI: dead lane status + cf key hint
+  A11.setView('keys');
+  const html29 = renderToString(React11.createElement(App));
+  if (!/Free tier ended/.test(html29)) throw new Error('dead-lane status not rendered');
+  if (!/accountId:apiToken/.test(html29)) throw new Error('cf key hint placeholder missing');
+  A11.removeKey('gemini'); A11.removeKey('groq');
+  console.log('[29] $0 mode — cloudflare dual-credential lane ✓ · lane health verdicts (ok/dead/unknown) ✓ · dead lane demoted by auto-best ✓ · UI status + hint ✓');
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

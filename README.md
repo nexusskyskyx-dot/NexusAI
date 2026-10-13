@@ -128,6 +128,16 @@ Add keys in **Keys & Models** inside the app (stored in your browser), or set th
 
 Failures degrade gracefully: dead agents are retried on fallback models, a dead drafter is skipped, and if the synthesizer fails the best surviving draft is shown.
 
+## 💸 The $0 stack
+
+NexusAI is built to run on a **$0 budget** — every component is free:
+
+- **You pay nothing to run it** — Node + Express, self-hosted; the browser-direct transport even works with static hosting alone (keys never touch a server).
+- **Users bring their own keys** (BYOK) — the startup carries zero inference cost, ever.
+- **10 zero-credit lanes** — Gemini 3 Flash (frontier-class, 1M ctx) · GitHub Models (free GPT-4o/4.1) · OpenRouter `:free` (DeepSeek/Kimi/Qwen/GLM) · Groq · Mistral · Z.ai · NVIDIA NIM · Cohere · Hugging Face · **Cloudflare Workers AI** (10k free neurons/day — key format `accountId:apiToken`) — plus keyless Pollinations chat & image relays that need no account at all.
+- **Free-lane health monitoring** — every connected zero-credit provider is pinged hourly with a 1-token request; when a free tier dies (like Cerebras did), the lane is marked `⚠ Free tier ended`, Auto-Best remaps your models, and forced cascades route around it. A dead free tier never burns a user.
+- **Everything else is free infrastructure** — Jina reader (page fetching), Wikipedia/DuckDuckGo/MDN/GitHub search, design gallery references, and an offline demo model so the whole pipeline works with no network and no keys.
+
 ## 🗂 Project layout
 
 ```

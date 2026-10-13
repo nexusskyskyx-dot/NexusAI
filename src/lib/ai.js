@@ -136,7 +136,7 @@ async function attempt({ providerId, body, transport, signal }) {
   const kind = provider.kind;
   let url, headers;
   if (transport === 'direct') {
-    url = provider.baseUrl;
+    url = provider.url ? provider.url(body.__apiKey || '') : provider.baseUrl;
     headers = { 'Content-Type': 'application/json', ...(provider.headers ? provider.headers(body.__apiKey || '') : {}) };
     if (provider.directHeaders) Object.assign(headers, provider.directHeaders(body.__apiKey || ''));
     if (provider.needsKey && !body.__apiKey) {
