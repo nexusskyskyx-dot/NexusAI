@@ -75,7 +75,7 @@ export async function generateImage({ provider, model, prompt, w = 1024, h = 102
     const sizes = OPENAI_SIZES[model] || OPENAI_SIZES['dall-e-3'];
     const size = sizes[aspectIndex(aspect)] || sizes[0];
     const body = { model, prompt: String(prompt).slice(0, 3800), n: 1, size };
-    if (model.startsWith('dall-e')) body.response_format = 'url';
+    if (model.startsWith('dall-e')) body.response_format = 'b64_json'; // signed URLs expire — b64 is durable
     const r = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -92,4 +92,68 @@ export async function generateImage({ provider, model, prompt, w = 1024, h = 102
   }
 
   throw new Error(`Image provider kind "${reg.kind}" is not supported`);
+}
+
+// ── durability (v1.16.1): images must survive reloads, quota strips, expiry ──
+
+function loadImg(src) {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => resolve(im);
+    im.onerror = () => reject(new Error('load failed'));
+    im.src = src;
+  });
+}
+
+// durable(img) → { data } — a compressed JPEG data-URL snapshot that survives
+// page reloads (blob: URLs die with the session) and storage for years.
+// Browser-only; returns {} when canvas isn't available (Node, SSR) or the
+// source is cross-origin-tainted — the regen recipe covers those cases.
+export async function durable(img) {
+  if (typeof document === 'undefined') return {};
+  const src = img?.src;
+  if (!src || /^(https?:)/i.test(src)) return {}; // remote → regen recipe instead
+  try {
+    const image = await loadImg(src);
+    const MAX = 896;
+    const scale = Math.min(1, MAX / Math.max(image.naturalWidth, image.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    c.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const ctx = c.getContext('2d');
+    ctx.drawImage(image, 0, 0, c.width, c.height);
+    return { data: c.toDataURL('image/jpeg', 0.8) };
+  } catch {
+    return {};
+  }
+}
+
+// regenFor(img, prompt) → deterministic re-fetch recipe. Pollinations URLs are
+// a pure function of (prompt, model, w, h, seed) — same recipe, same image.
+export function regenFor(img, prompt) {
+  if (!img) return null;
+  const rec = {
+    provider: img.provider,
+    model: img.model,
+    prompt: String(prompt || img.prompt || '').slice(0, 900),
+    w: img.w,
+    h: img.h,
+    seed: img.seed,
+  };
+  if (rec.provider === 'pollinations' && rec.model && rec.prompt && rec.w && rec.h && rec.seed != null) {
+    rec.url = pollinationsUrl({ prompt: rec.prompt, model: rec.model, w: rec.w, h: rec.h, seed: rec.seed });
+  }
+  return rec;
+}
+
+// recoverChain(im) → ordered candidate srcs: live src → durable data → regen URL.
+// Walk it on <img> onError until something loads; the expired card is the last
+// resort, never the first response.
+export function recoverChain(im) {
+  const chain = [];
+  if (typeof im?.src === 'string' && im.src) chain.push(im.src); // live src first (blob alive in-session)
+  if (typeof im?.data === 'string' && im.data.startsWith('data:')) chain.push(im.data);
+  if (im?.regen?.url) chain.push(im.regen.url);
+  return [...new Set(chain)];
 }

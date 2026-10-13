@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore, actions } from '../store.js';
 import { IconX, IconRefresh, IconDownload, IconEdit, IconCheck } from './Icons.jsx';
+import { recoverChain } from '../lib/images.js';
 
 // ── filters ──────────────────────────────────────────────────────────────────
 const FILTERS = [
@@ -63,8 +64,11 @@ export default function ImageStudio() {
     setTool('pan');
     setStrokeCount(0);
     stateRef.current = { zoom: 1, rot: 0, flipH: false, flipV: false, filters: { ...DEFAULT_FILTERS }, offset: { x: 0, y: 0 }, strokes: [] };
+    // v1.16.1 · walk the recovery chain: live src → durable data → regen URL.
+    // Only when every candidate fails does the user see an error.
+    const chain = recoverChain(img);
+    let idx = 0;
     const im = new Image();
-    if (/^https?:/i.test(img.src)) im.crossOrigin = 'anonymous';
     im.onload = () => {
       imgRef.current = im;
       const a = document.createElement('canvas');
@@ -74,8 +78,19 @@ export default function ImageStudio() {
       setLoaded(true);
       setTimeout(fit, 0);
     };
-    im.onerror = () => setLoadErr('Could not load this image (it may have expired — regenerate it).');
-    im.src = img.src;
+    im.onerror = () => {
+      idx += 1;
+      if (idx < chain.length) {
+        im.src = chain[idx];
+      } else {
+        setLoadErr('Could not load this image (it may have expired — regenerate it).');
+      }
+    };
+    if (!chain.length) {
+      setLoadErr('Could not load this image (it may have expired — regenerate it).');
+      return;
+    }
+    im.src = chain[0];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [img?.src]);
 

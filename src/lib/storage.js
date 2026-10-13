@@ -29,23 +29,55 @@ function save(k, v) {
   } catch {}
 }
 
-// Guard: base64 images (OpenAI) can be megabytes. If conversations grow past
-// ~4MB, drop the oldest embedded data-URL images (URL-based ones are tiny and
-// are regenerated on demand by Pollinations anyway).
-function stripBigImages(convs) {
+// Guard: embedded images can be megabytes. If conversations grow past the
+// budget, shed weight GRADUALLY and oldest-first, keeping every image
+// recoverable (v1.16.1):
+//   pass 1 · drop heavy raw `src` data-URLs (keep the small durable `data`
+//           snapshot + `regen` recipe)
+//   pass 2 · drop `data` snapshots oldest-first (keep `regen` → the image
+//           re-fetches itself from its deterministic recipe)
+//   pass 3 · last resort: mark expired — only for images with no recipe
+const CONV_BUDGET = 4_000_000;
+
+function sizeOf(v) {
+  try {
+    return JSON.stringify(v).length;
+  } catch {
+    return Infinity;
+  }
+}
+
+function mapImages(convs, fn) {
   return convs.map((c) => ({
     ...c,
     messages: (c.messages || []).map((m) =>
-      m.kind === 'image' && Array.isArray(m.images)
-        ? {
-            ...m,
-            images: m.images.map((im) =>
-              typeof im?.src === 'string' && im.src.startsWith('data:') ? { ...im, src: null, expired: true } : im
-            ),
-          }
-        : m
+      m.kind === 'image' && Array.isArray(m.images) ? { ...m, images: m.images.map(fn) } : m
     ),
   }));
+}
+
+function stripBigImages(convs) {
+  let out = convs;
+  // pass 1 — raw data-URL srcs (big OpenAI payloads) → durable snapshot + regen
+  out = mapImages(out, (im) =>
+    typeof im?.src === 'string' && im.src.startsWith('data:')
+      ? { ...im, src: im.data || null, expired: !im.data && !im.regen?.url }
+      : im
+  );
+  // pass 2 — drop durable data snapshots oldest-first, keeping regen recipes
+  let idx = 0;
+  const images = [];
+  for (const c of out) for (const m of c.messages || []) if (m.kind === 'image') images.push(...(m.images || []));
+  while (sizeOf(out) > CONV_BUDGET && idx < images.length) {
+    const im = images[idx++];
+    if (im?.data) {
+      delete im.data;
+      if (!im.src) im.expired = !im.regen?.url;
+    }
+  }
+  if (sizeOf(out) <= CONV_BUDGET) return out;
+  // pass 3 — nothing left to shed gracefully
+  return mapImages(out, (im) => ({ ...im, src: null, data: null, expired: !im.regen?.url }));
 }
 
 export const storage = {
@@ -77,7 +109,7 @@ export const storage = {
   saveConvs: (v) => {
     let convs = v;
     try {
-      if (JSON.stringify(convs).length > 4_000_000) convs = stripBigImages(convs);
+      if (sizeOf(convs) > CONV_BUDGET) convs = stripBigImages(convs);
     } catch {}
     save(K.convs, convs);
   },

@@ -12,7 +12,7 @@
 
 import { completeChat } from '@lib/ai.js';
 import { searchWeb } from '@lib/websearch.js';
-import { generateImage as defaultGenerate } from '@lib/images.js';
+import { generateImage as defaultGenerate, durable, regenFor } from '@lib/images.js';
 
 const ENHANCER_SYSTEM = `You are a world-class prompt engineer for AI image generation.
 Rewrite the user's idea into ONE rich image prompt: subject with specifics, action/pose, environment, lighting, color mood, composition, art style or camera lens, quality descriptors.
@@ -273,7 +273,12 @@ export async function runImagePipeline({
       }
     }
     if (verdict?.pass) {
-      images.push({ ...img, check: 'pass' });
+      // v1.16.1 · durability: regen recipe (pure) + compressed data snapshot
+      // (browser) — the image survives reloads and never strands the user
+      const keep = { ...img, check: 'pass', regen: regenFor(img, finalPrompt) };
+      const dur = await durable(keep);
+      if (dur?.data) keep.data = dur.data;
+      images.push(keep);
       stage('check', 'done', 'passed');
     } else {
       stage('check', 'fail', verdict?.why || 'failed twice');

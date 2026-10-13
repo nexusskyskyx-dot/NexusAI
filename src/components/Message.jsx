@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useStore, actions } from '../store.js';
 import { renderMarkdown } from '@lib/markdown.js';
 import { previewableLang, extForLang } from '@lib/preview.js';
+import { recoverChain } from '@lib/images.js';
 import { modelLabel } from '@shared/providers.js';
 import { IconCopy, IconCheck, IconRefresh, IconTrash, IconEdit, IconBrain, IconAgents, IconEye } from './Icons.jsx';
 
@@ -171,6 +172,36 @@ function Reasoning({ text }) {
   );
 }
 
+// v1.16.1 · an image that refuses to die: src → durable data → regen URL,
+// and only then (after every candidate failed) the expired card.
+function ImgCard({ im, onOpen }) {
+  const chain = recoverChain(im);
+  const [step, setStep] = useState(0);
+  const src = chain[step];
+  if (!src) {
+    return (
+      <div className="img-card expired">
+        <span className="img-expired">Image unavailable — regenerate</span>
+      </div>
+    );
+  }
+  return (
+    <button className="img-card" onClick={onOpen} title="Open in viewer / editor">
+      <img
+        src={src}
+        alt={im.prompt || 'generated image'}
+        loading="lazy"
+        onError={() => setStep((s) => s + 1)}
+      />
+      <span className="img-cap">
+        {im.model} · {im.w}×{im.h}
+        {im.upscaled ? ' · sharpened' : ''}
+        {im.check === 'pass' ? ' ✓' : im.check === 'fail' ? ' ⚠' : ''}
+      </span>
+    </button>
+  );
+}
+
 function useCopy() {
   const [copied, setCopied] = useState(false);
   return [
@@ -286,22 +317,9 @@ export default function Message({ msg, isLast }) {
           <ImageLog msg={msg} />
           {msg.images?.length ? (
           <div className={`img-grid n${Math.min(msg.images.length, 4)}`}>
-            {msg.images.map((im, i) =>
-              im.src ? (
-                <button key={i} className="img-card" onClick={() => actions.openStudio(im, msg.id)} title="Open in viewer / editor">
-                  <img src={im.src} alt={im.prompt || 'generated image'} loading="lazy" />
-                  <span className="img-cap">
-                    {im.model} · {im.w}×{im.h}
-                    {im.upscaled ? ' · sharpened' : ''}
-                    {im.check === 'pass' ? ' ✓' : im.check === 'fail' ? ' ⚠' : ''}
-                  </span>
-                </button>
-              ) : (
-                <div key={i} className="img-card expired">
-                  <span className="img-expired">Image expired — regenerate</span>
-                </div>
-              )
-            )}
+            {msg.images.map((im, i) => (
+              <ImgCard key={i} im={im} onOpen={() => actions.openStudio(im, msg.id)} />
+            ))}
           </div>
         ) : (
           <div className="msg-ai-wait">

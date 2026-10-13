@@ -713,4 +713,73 @@ console.log(`[15] open air — input-first composer ✓ · slim scrollable strip
   console.log(`[17] image team — research→enhance→generate→upscale→check ✓ · retry-on-fail ✓ (${checks17.join(',')}) · deterministic fallback ✓ · all-fail warns ✓ · worklog UI ✓`);
 }
 
+// 18 · images are always visible — durability + recovery chain
+{
+  const { recoverChain, regenFor, pollinationsUrl } = await import('../src/lib/images.js');
+  const { runImagePipeline: pipe18 } = await import('../src/lib/imagepipe.js');
+  const { storage: store18 } = await import('../src/lib/storage.js');
+
+  // recovery chain order: src → data → regen url (deduped)
+  const im18 = {
+    src: 'blob:alive', data: 'data:image/jpeg;base64,AAA',
+    regen: { url: 'https://image.pollinations.ai/prompt/x?seed=1' },
+  };
+  const chain18 = recoverChain(im18);
+  if (JSON.stringify(chain18) !== JSON.stringify(['blob:alive', 'data:image/jpeg;base64,AAA', 'https://image.pollinations.ai/prompt/x?seed=1']))
+    throw new Error('chain order wrong: ' + JSON.stringify(chain18));
+  if (recoverChain({ src: 'blob:x', data: 'data:image/jpeg;base64,AAA' }).length !== 2) throw new Error('chain without regen wrong');
+  if (recoverChain({}).length !== 0) throw new Error('empty chain not empty');
+
+  // regen recipe: pollinations deterministic URL; openai recipe without URL
+  const r18 = regenFor({ provider: 'pollinations', model: 'flux', prompt: 'a dragon', w: 1024, h: 1024, seed: 42 }, 'enhanced dragon');
+  if (r18.prompt !== 'enhanced dragon' || r18.url !== pollinationsUrl({ prompt: 'enhanced dragon', model: 'flux', w: 1024, h: 1024, seed: 42 }))
+    throw new Error('pollinations regen recipe wrong');
+  const r18b = regenFor({ provider: 'openai-images', model: 'dall-e-3', prompt: 'p', w: 1024, h: 1024, seed: 7 }, 'p');
+  if (r18b.provider !== 'openai-images' || r18b.url) throw new Error('openai regen should have no url (data covers it)');
+
+  // pipeline attaches regen to every shipped image
+  const out18 = await pipe18({
+    prompt: 'a dragon', count: 1, web: false,
+    complete: async () => 'ignored',
+    generate: async () => ({ src: 'blob:zz', w: 1024, h: 1024, seed: 5, model: 'flux', provider: 'pollinations', prompt: 'a dragon', remote: false }),
+    upscale: async (im) => ({ ...im, upscaled: true }),
+    check: async () => ({ pass: true }),
+  });
+  if (!out18.images[0]?.regen?.url) throw new Error('pipeline image missing regen recipe');
+  if (out18.images[0].check !== 'pass') throw new Error('pipeline check badge missing');
+
+  // storage: progressive strip keeps images recoverable (oldest data dropped first, regen kept)
+  const mkImg = (i) => ({ src: 'blob:s' + i, data: 'data:image/jpeg;base64,' + 'A'.repeat(60_000), regen: { url: 'https://image.pollinations.ai/prompt/i' + i }, model: 'flux', w: 1024, h: 1024, seed: i });
+  const convs18 = [
+    { id: 'c1', title: 'old', messages: [
+      { id: 'm1', kind: 'image', role: 'assistant', images: [mkImg(1)] },
+      { id: 'm2', kind: 'image', role: 'assistant', images: [mkImg(2)] },
+      { id: 'm3', kind: 'image', role: 'assistant', images: [mkImg(3)] },
+      { id: 'm4', kind: 'text', role: 'assistant', content: 'X'.repeat(3_900_000) },
+    ]},
+  ];
+  const LS18 = new Map();
+  globalThis.localStorage = { getItem: (k) => LS18.get(k) ?? null, setItem: (k, v) => LS18.set(k, String(v)), removeItem: (k) => LS18.delete(k) };
+  store18.saveConvs(convs18);
+  const saved18 = JSON.parse(LS18.get('nexus.convs.v1'))[0];
+  const imgs18 = saved18.messages.filter((m) => m.kind === 'image').flatMap((m) => m.images);
+  if (imgs18.length !== 3) throw new Error('images lost entirely');
+  if (!imgs18.every((im) => im.regen?.url)) throw new Error('regen recipes stripped — images unrecoverable');
+  if (imgs18.every((im) => im.data)) throw new Error('strip never ran despite over-budget payload');
+  const keptData18 = imgs18.filter((im) => im.data).length;
+  if (keptData18 === 0 || keptData18 === 3) throw new Error('expected partial data retention, got ' + keptData18);
+  if (LS18.get('nexus.convs.v1').length > 4_050_000) throw new Error('payload still over budget after strip: ' + LS18.get('nexus.convs.v1').length);
+  delete globalThis.localStorage;
+
+  // UI: dead blob + data → img renders from src with onError armed; no candidates → friendly card
+  const Message18 = (await import('../src/components/Message.jsx')).default;
+  const msgA18 = { id: 'a18', role: 'assistant', kind: 'image', mode: 'image', streaming: false, images: [im18] };
+  const htmlA18 = renderToString(React11.createElement(Message18, { msg: msgA18, isLast: false }));
+  if (!htmlA18.includes('blob:alive')) throw new Error('img not rendering from live src');
+  const msgB18 = { id: 'b18', role: 'assistant', kind: 'image', mode: 'image', streaming: false, images: [{ model: 'flux', w: 1024, h: 1024 }] };
+  const htmlB18 = renderToString(React11.createElement(Message18, { msg: msgB18, isLast: false }));
+  if (!/Image unavailable/.test(htmlB18)) throw new Error('last-resort card missing for unrecoverable image');
+  console.log(`[18] image durability — chain src→data→regen ✓ · recipes on every image ✓ · progressive strip (kept ${keptData18}/3 data, all regen) ✓ · UI recovery + last-resort card ✓`);
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');
