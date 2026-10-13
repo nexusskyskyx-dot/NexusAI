@@ -128,6 +128,15 @@ Add keys in **Keys & Models** inside the app (stored in your browser), or set th
 
 Failures degrade gracefully: dead agents are retried on fallback models, a dead drafter is skipped, and if the synthesizer fails the best surviving draft is shown.
 
+## 🖥 Interface
+
+The interface follows the chat-UI patterns that build user trust (Echo AI doctrine):
+
+- **New-chat screen, never an empty box** — a greeting plus four curated conversation starters that carry the scope of what NexusAI can do (research · build · draw · multi-agent reasoning)
+- **Full response lifecycle** — typing dots while thinking, streaming with an always-visible stop button, sources on every researched answer, inline errors with retry
+- **Jump to latest** — auto-follow pauses the moment you scroll up to read; a floating pill brings you back
+- **History that behaves like a tool** — searchable by title *and* message content, grouped by date, renamable
+
 ## 💸 The $0 stack
 
 NexusAI is built to run on a **$0 budget** — every component is free:

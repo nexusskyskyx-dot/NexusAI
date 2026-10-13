@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore, actions } from '../store.js';
-import { BrandLogo, IconChat, IconAgents, IconCode, IconKeys, IconPlus, IconTrash, IconBolt, IconX, IconFolder } from './Icons.jsx';
+import { BrandLogo, IconChat, IconAgents, IconCode, IconKeys, IconPlus, IconTrash, IconBolt, IconX, IconFolder, IconEdit } from './Icons.jsx';
 
 const ACCENTS = [
   { id: 'blue', c: '#2f6bff' },
@@ -36,6 +36,25 @@ export default function Sidebar() {
   const open = !!s.sidebarOpen;
   const keyCount = Object.values(s.keys).filter(Boolean).length;
   const close = () => actions.setSidebarOpen(false);
+  const [q, setQ] = useState('');
+
+  // searchable history: match title OR any message content
+  const term = q.trim().toLowerCase();
+  const visible = !term
+    ? s.conversations
+    : s.conversations.filter(
+        (c) =>
+          (c.title || '').toLowerCase().includes(term) ||
+          c.messages.some((m) => String(m.content || '').toLowerCase().includes(term))
+      );
+  const DAY = 86400000;
+  const age = (ts) => Date.now() - ts;
+  const GROUPS = [
+    ['Today', visible.filter((c) => age(c.ts) < DAY)],
+    ['Yesterday', visible.filter((c) => age(c.ts) >= DAY && age(c.ts) < 2 * DAY)],
+    ['Previous 7 days', visible.filter((c) => age(c.ts) >= 2 * DAY && age(c.ts) < 7 * DAY)],
+    ['Older', visible.filter((c) => age(c.ts) >= 7 * DAY)],
+  ];
 
   return (
     <>
@@ -77,34 +96,69 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="convs">
             <div className="convs-label">Conversations</div>
+            <div className="conv-search">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search chats…"
+                aria-label="Search conversations"
+              />
+              {q ? (
+                <button className="conv-search-x" title="Clear search" onClick={() => setQ('')}>
+                  <IconX size={12} />
+                </button>
+              ) : null}
+            </div>
             <div className="convs-list">
               {s.conversations.length === 0 && <div className="convs-empty">No chats yet — start one above.</div>}
-              {s.conversations.map((c) => (
-                <div
-                  key={c.id}
-                  className={`conv-item ${c.id === s.activeId && s.view === 'chat' ? 'active' : ''}`}
-                  onClick={() => {
-                    actions.selectConversation(c.id);
-                    close();
-                  }}
-                >
-                  <div className="conv-title">{c.title || 'New chat'}</div>
-                  <div className="conv-meta">
-                    {c.messages.find((m) => m.mode === 'team') ? 'Team' : c.messages.find((m) => m.kind === 'image') ? 'Image' : 'Solo'} ·{' '}
-                    {new Date(c.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              {visible.length === 0 && s.conversations.length > 0 && (
+                <div className="convs-empty">No chats match “{q.trim()}”.</div>
+              )}
+              {GROUPS.map(([label, list]) =>
+                list.length ? (
+                  <div key={label} className="conv-group">
+                    <div className="conv-group-label">{label}</div>
+                    {list.map((c) => (
+                      <div
+                        key={c.id}
+                        className={`conv-item ${c.id === s.activeId && s.view === 'chat' ? 'active' : ''}`}
+                        onClick={() => {
+                          actions.selectConversation(c.id);
+                          close();
+                        }}
+                      >
+                        <div className="conv-title">{c.title || 'New chat'}</div>
+                        <div className="conv-meta">
+                          {c.messages.find((m) => m.mode === 'team') ? 'Team' : c.messages.find((m) => m.kind === 'image') ? 'Image' : 'Solo'} · {c.messages.length} msg
+                        </div>
+                        <span className="conv-actions">
+                          <button
+                            className="conv-del"
+                            title="Rename chat"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const t = window.prompt('Rename chat', c.title || '');
+                              if (t && t.trim()) actions.renameConversation(c.id, t.trim());
+                            }}
+                          >
+                            <IconEdit size={12} />
+                          </button>
+                          <button
+                            className="conv-del"
+                            title="Delete chat"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              actions.deleteConversation(c.id);
+                            }}
+                          >
+                            <IconTrash size={13} />
+                          </button>
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <button
-                    className="conv-del"
-                    title="Delete chat"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      actions.deleteConversation(c.id);
-                    }}
-                  >
-                    <IconTrash size={13} />
-                  </button>
-                </div>
-              ))}
+                ) : null
+              )}
             </div>
           </div>
         )}

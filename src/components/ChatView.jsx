@@ -7,42 +7,29 @@ import { BrandLogo, IconSparkle, IconCode, IconBrain, IconBolt, IconImage, IconR
 
 const SUGGESTIONS = [
   {
-    icon: <IconCode size={16} />,
+    icon: <IconBolt size={17} />,
+    title: 'Research anything, live',
+    sub: 'reads real sources, cites them',
+    prompt: 'Research the best free AI models available right now and compare their speed, context and limits. Cite sources.',
+  },
+  {
+    icon: <IconCode size={17} />,
     title: 'Build a neon landing page',
-    sub: 'HTML + CSS you can preview live',
-    prompt: 'Build me a bold OLED-black landing page for a futuristic startup called Nova. Full HTML + CSS in one file, big bold typography, neon green accents.',
+    sub: 'HTML + CSS with live preview',
+    prompt: 'Build me a bold OLED-black landing page for a futuristic startup called Nova. Full HTML + CSS in one file, big bold typography, saturated blue accents.',
   },
   {
-    icon: <IconBrain size={16} />,
-    title: 'Reason through a hard problem',
-    sub: 'watch the agents debate',
-    prompt: 'Three doors, one guard always lies, one always tells the truth. What single question reveals the safe door? Explain step by step.',
-  },
-  {
-    icon: <IconBolt size={16} />,
-    title: 'Write a Python script',
-    sub: 'complete, runnable code',
-    prompt: 'Write a Python script that renames all files in a folder to kebab-case and prints a summary table of changes.',
-  },
-  {
-    icon: <IconSparkle size={16} />,
-    title: 'Explain anything simply',
-    sub: 'clear, bold, structured',
-    prompt: 'Explain how large language models work — for a smart 12-year-old. Use a great analogy and bold structure.',
-  },
-  {
-    icon: <IconImage size={16} />,
+    icon: <IconImage size={17} />,
     title: 'Generate an image',
     sub: 'free · no key needed',
     mode: 'image',
-    prompt: 'A futuristic OLED-black megacity at night, neon emerald light trails, cinematic wide shot, ultra detailed, moody atmosphere',
+    prompt: 'A futuristic OLED-black megacity at night, saturated blue light trails, cinematic wide shot, ultra detailed, moody atmosphere',
   },
   {
-    icon: <IconRocket size={16} />,
-    title: 'Build a full project',
-    sub: 'the whole agent team codes it',
-    view: 'projects',
-    prompt: '',
+    icon: <IconBrain size={17} />,
+    title: 'Reason with the agent team',
+    sub: 'planner · drafters · reviewer',
+    prompt: 'Three doors, one guard always lies, one always tells the truth. What single question reveals the safe door? Show the reasoning.',
   },
 ];
 
@@ -52,24 +39,13 @@ function Hero() {
   return (
     <div className="hero">
       <div className="hero-logo">
-        <BrandLogo size={64} />
+        <BrandLogo size={72} />
       </div>
-      <h1 className="hero-title">
-        NEXUS<span>AI</span>
-      </h1>
-      <p className="hero-sub">Multi-agent chat intelligence</p>
-      <div className="hero-pipeline">
-        <span className="hp">Planner</span> <span className="hp-arrow">→</span>
-        <span className="hp">Drafters</span> <span className="hp-arrow">→</span>
-        <span className="hp">Reviewer</span> <span className="hp-arrow">→</span>
-        <span className="hp">Synthesizer</span>
-      </div>
-      <p className="hero-models">DeepSeek · Qwen · Claude · GPT · Gemini · Groq · GitHub · free models</p>
-      {freeReady ? (
-        <div className="hero-free">
-          <span className="led" /> Free mode active — no keys needed. Add keys anytime for frontier models.
-        </div>
-      ) : null}
+      <div className="hero-eyebrow">NEXUSAI · MULTI-AGENT CHAT</div>
+      <h1 className="hero-title">Where should we start?</h1>
+      <p className="hero-sub">
+        Chat, research the live web, generate images, or set the agent team on a hard problem — auto-routed from one box.
+      </p>
       <div className="suggestions">
         {SUGGESTIONS.map((sg, i) => (
         <button
@@ -85,10 +61,21 @@ function Hero() {
           }}
         >
             <span className="sg-icon">{sg.icon}</span>
-            <span className="sg-title">{sg.title}</span>
-            <span className="sg-sub">{sg.sub}</span>
+            <span className="sg-body">
+              <span className="sg-title">{sg.title}</span>
+              <span className="sg-sub">{sg.sub}</span>
+            </span>
+            <span className="sg-arrow">→</span>
           </button>
         ))}
+      </div>
+      <div className="hero-foot">
+        {freeReady ? (
+          <span className="hero-free"><span className="led" /> Free mode — no keys needed</span>
+        ) : (
+          <span className="hero-free"><span className="led on" /> Keys connected · frontier models unlocked</span>
+        )}
+        <span className="hero-models">Gemini · GPT · Claude · DeepSeek · Qwen · Mistral · Groq · 55 xKiro free models</span>
       </div>
     </div>
   );
@@ -99,16 +86,33 @@ export default function ChatView() {
   const conv = s.conversations.find((c) => c.id === s.activeId);
   const listRef = useRef(null);
   const stickRef = useRef(true);
+  const [behind, setBehind] = useState(false);
 
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
+    let raf = 0;
     const onScroll = () => {
-      stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const stick = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        stickRef.current = stick;
+        setBehind(!stick);
+      });
     };
     el.addEventListener('scroll', onScroll);
-    return () => el.removeEventListener('scroll', onScroll);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
+
+  const jumpLatest = () => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  };
 
   const msgCount = conv?.messages.length || 0;
   const lastContent = conv?.messages[msgCount - 1]?.content?.length || 0;
@@ -132,6 +136,11 @@ export default function ChatView() {
               ))}
             </div>
           )}
+          {behind && messages.length ? (
+            <button className="jump-latest" onClick={jumpLatest} title="Jump to latest">
+              ↓ Latest
+            </button>
+          ) : null}
         </div>
         <AgentsPanel />
       </div>

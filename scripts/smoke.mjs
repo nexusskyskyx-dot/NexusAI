@@ -1469,4 +1469,51 @@ function modelLabelSafeguard(p, m) {
   console.log('[32] failover pool always has keyless lanes ✓ · 404 → :free twin retry ✓ · truthful every-lane-failed summary ✓ · sync 404 is a no-op ✓');
 }
 
+// 33 · v1.23 Echo-grade interface — starters, typing state, history tools
+{
+  const Message33 = (await import('../src/components/Message.jsx')).default;
+  const Sidebar33 = (await import('../src/components/Sidebar.jsx')).default;
+  const fs33 = await import('node:fs');
+
+  // 1 · new-chat screen: greeting, 4 curated starters, no pipeline noise
+  A11.setView('chat');
+  A11.newConversation();
+  const hero33 = renderToString(React11.createElement(App));
+  for (const needle of ['Where should we start', 'MULTI-AGENT CHAT', 'Research anything, live', 'Build a neon landing page', 'Generate an image', 'Reason with the agent team']) {
+    if (!hero33.includes(needle)) throw new Error('new-chat screen missing: ' + needle);
+  }
+  if (/hero-pipeline/.test(hero33)) throw new Error('pipeline row still rendered on the new-chat screen');
+  if (!/sg-arrow/.test(hero33)) throw new Error('starter hover-arrow affordance missing');
+
+  // 2 · response states: solo shows typing dots; team keeps hexagon loader
+  const t33 = renderToString(React11.createElement(Message33, { msg: { id: 't33', role: 'assistant', content: '', streaming: true, mode: 'solo', model: 'Mistral Large 4' }, isLast: true }));
+  if (!/class="typing"/.test(t33) || !/tdot/.test(t33) || !/Mistral Large 4/.test(t33)) throw new Error('solo typing-dots state missing');
+  const tm33 = renderToString(React11.createElement(Message33, { msg: { id: 'tm33', role: 'assistant', content: '', streaming: true, mode: 'team', stages: [] }, isLast: true }));
+  if (!/preparing/.test(tm33)) throw new Error('team preparing loader missing');
+
+  // 3 · message anatomy: user bubble intact
+  const u33 = renderToString(React11.createElement(Message33, { msg: { id: 'u33', role: 'user', content: 'hello there 33' }, isLast: false }));
+  if (!/msg-user-card/.test(u33) || !/hello there 33/.test(u33)) throw new Error('user bubble broken');
+
+  // 4 · history: search box, date groups, rename
+  const sb33 = renderToString(React11.createElement(Sidebar33));
+  if (!/Search chats/.test(sb33)) throw new Error('history search box missing');
+  if (!/>Today</.test(sb33)) throw new Error('Today date group missing');
+  let active33 = null;
+  renderToString(React11.createElement(() => { active33 = useStore11().activeId; return ''; }));
+  A11.renameConversation(active33, 'Renamed by test 33');
+  const rn33 = renderToString(React11.createElement(Sidebar33));
+  if (!/Renamed by test 33/.test(rn33)) throw new Error('renameConversation did not rename');
+  if (!/Rename chat/.test(rn33)) throw new Error('rename button missing');
+
+  // 5 · jump-to-latest + CSS landings
+  const src33 = fs33.readFileSync('src/components/ChatView.jsx', 'utf8');
+  if (!src33.includes('jump-latest')) throw new Error('jump-to-latest wiring missing');
+  const css33 = fs33.readFileSync('src/styles.css', 'utf8');
+  for (const sel of ['.typing', '.tdot', '.jump-latest', '.conv-search', '.conv-group-label', '.sg-arrow', '.hero-eyebrow']) {
+    if (!css33.includes(sel)) throw new Error('css missing: ' + sel);
+  }
+  console.log('[33] new-chat screen with curated starters ✓ · typing-dots + hexagon states ✓ · history search/date-groups/rename ✓ · jump-to-latest ✓');
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

@@ -343,8 +343,15 @@ export default function Message({ msg, isLast }) {
             <div className="img-enhanced" title={msg.enhancedPrompt}>✨ {msg.enhancedPrompt}</div>
           ) : null}
         </>
-      ) : empty && !(msg.mode === 'team' && msg.stages?.length) ? (
-        <NexusLoader phase="thinking" sub={msg.mode === 'team' ? PHASE_SUB[lastStage] || 'preparing' : msg.model || null} size={34} />
+      ) : empty && msg.mode === 'team' && !msg.stages?.length ? (
+        <NexusLoader phase="thinking" sub="preparing" size={34} />
+      ) : empty && msg.mode !== 'team' ? (
+        <div className="typing" role="status" aria-label="Assistant is thinking">
+          <span className="tdot" />
+          <span className="tdot" />
+          <span className="tdot" />
+          <span className="typing-sub">{msg.model || 'thinking'}</span>
+        </div>
       ) : (
         <div ref={bodyRef} className={`md ${msg.streaming ? 'streaming' : ''}`} dangerouslySetInnerHTML={{ __html: html }} />
       )}

@@ -330,6 +330,11 @@ function ensureConversation() {
 function selectConversation(id) {
   setState({ activeId: id, view: 'chat' });
 }
+function renameConversation(id, title) {
+  const t = String(title || '').trim().slice(0, 80);
+  if (!t) return;
+  setState((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, title: t } : c)) }), { persist: true });
+}
 function deleteConversation(id) {
   setState((s) => {
     const conversations = s.conversations.filter((c) => c.id !== id);
@@ -847,6 +852,7 @@ export const actions = {
   newConversation,
   selectConversation,
   deleteConversation,
+  renameConversation,
   clearAll,
   sendMessage,
   regenerate,
