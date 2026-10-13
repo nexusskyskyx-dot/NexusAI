@@ -41,6 +41,8 @@ export const PROVIDERS = [
     baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
     needsKey: true,
     keyUrl: 'https://openrouter.ai/settings/keys',
+    free: true,
+    zeroCredit: true, // :free models bill $0.00 — the key is never charged
     direct: true,
     free: true,
     note: 'One key, 400+ models. Free tier: ~25 :free models — 50 requests/day on an unfunded account, 1,000/day once you ever buy $10 of credits. Paid flagships (Claude / GPT-5 / Gemini / Grok) need credits. The free list auto-refreshes live.',
@@ -93,6 +95,7 @@ export const PROVIDERS = [
     baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
     needsKey: true,
     keyUrl: 'https://console.groq.com/keys',
+    zeroCredit: true, // free tier — the key is never billed
     direct: false,
     free: true,
     note: 'Groq’s LPU inference is absurdly fast. Free tier: 30 requests/min, ~1,000/day — Llama 4, Llama 3.3 70B and GPT-OSS 120B included.',
@@ -112,6 +115,7 @@ export const PROVIDERS = [
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     needsKey: true,
     keyUrl: 'https://aistudio.google.com/apikey',
+    zeroCredit: true, // free tier — no card, the key is never billed
     direct: true,
     free: true,
     note: 'The strongest free tier available: Gemini 3 Flash free (rate-limited, 1M-token context) with just a Google account — the closest thing to frontier models for $0. OpenAI-compatible endpoint.',
@@ -189,6 +193,7 @@ export const PROVIDERS = [
     baseUrl: 'https://models.github.ai/inference/chat/completions',
     needsKey: true,
     keyUrl: 'https://github.com/settings/personal-access-tokens/new',
+    zeroCredit: true, // free with a PAT — the token is never billed
     direct: false,
     free: true,
     note: 'Free inference with your GitHub account — create a fine-grained PAT with “models: read”. GPT-4o, GPT-4.1, Llama 4 and more, rate-limited.',
@@ -208,6 +213,7 @@ export const PROVIDERS = [
     baseUrl: 'https://api.mistral.ai/v1/chat/completions',
     needsKey: true,
     keyUrl: 'https://console.mistral.ai/api-keys',
+    zeroCredit: true, // free Experiment tier — the key is never billed
     direct: false,
     free: true,
     note: 'Mistral La Plateforme free tier (phone verification). European, fast, solid general models. Routed through the local server proxy.',
@@ -244,6 +250,7 @@ export const PROVIDERS = [
     baseUrl: 'https://integrate.api.nvidia.com/v1/chat/completions',
     needsKey: true,
     keyUrl: 'https://build.nvidia.com/',
+    zeroCredit: true, // free monthly credits — the key is never billed
     direct: false,
     free: true,
     note: 'NVIDIA’s hosted open-model catalog — 100+ models (Llama, GPT-OSS, Qwen Coder, Nemotron) with free monthly credits on a free developer account. No credit card.',
@@ -263,6 +270,7 @@ export const PROVIDERS = [
     baseUrl: 'https://api.cohere.ai/compatibility/v1/chat/completions',
     needsKey: true,
     keyUrl: 'https://dashboard.cohere.com/api-keys',
+    zeroCredit: true, // trial key — the key is never billed
     direct: false,
     free: true,
     note: 'Cohere Command models via the OpenAI-compatible endpoint. Trial key never expires, no card — 20 req/min, 1,000 calls/month. Strong at RAG and long documents (256K context).',
@@ -282,6 +290,7 @@ export const PROVIDERS = [
     baseUrl: 'https://router.huggingface.co/v1/chat/completions',
     needsKey: true,
     keyUrl: 'https://huggingface.co/settings/tokens',
+    zeroCredit: true, // free monthly credits — the token is never billed
     direct: false,
     free: true,
     note: 'The Inference Providers router — one token, 200+ open models (DeepSeek, Llama, GPT-OSS, Qwen) routed to Groq/Together/Fireworks/Cerebras. Create a fine-grained token with “Make calls to Inference Providers”. Free accounts get monthly credits.',
@@ -301,6 +310,7 @@ export const PROVIDERS = [
     baseUrl: 'https://api.z.ai/api/paas/v4/chat/completions',
     needsKey: true,
     keyUrl: 'https://z.ai/manage-apikey/apikey-list',
+    zeroCredit: true, // GLM flash models are free — the key is never billed
     direct: false,
     free: true,
     note: 'Zhipu’s global GLM platform — GLM-4.7-Flash and GLM-4.5-Flash are completely free (rate-limited) and strong at coding and agents. OpenAI-compatible endpoint.',
@@ -456,6 +466,7 @@ export function serializeProviders() {
     keyUrl: p.keyUrl,
     direct: p.direct,
     free: !!p.free,
+    zeroCredit: !!p.zeroCredit,
     note: p.note,
     liveCatalog: p.liveCatalog || null,
     models: p.models,

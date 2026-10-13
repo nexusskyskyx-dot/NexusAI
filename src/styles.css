@@ -1754,3 +1754,11 @@ body {
 /* v1.21 · brand logo (custom image) */
 .brandlogo-img { display: block; object-fit: contain; border-radius: 24%; filter: drop-shadow(0 0 14px var(--acc-glow)); }
 .hero-title { font-weight: 800; }
+
+/* v1.21.2 · zero-credit lane badge */
+.zero-credit-lane {
+  display: flex; align-items: center; gap: 7px; margin-top: 10px;
+  font-family: var(--font-d); font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--acc); background: var(--acc-dim); border: 1px solid var(--acc-soft);
+  border-radius: 8px; padding: 7px 11px; width: fit-content;
+}

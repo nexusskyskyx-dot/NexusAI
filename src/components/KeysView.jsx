@@ -55,6 +55,12 @@ function ProviderCard({ p }) {
         </div>
       </div>
 
+      {p.zeroCredit && available && p.needsKey ? (
+        <div className="zero-credit-lane" title="The free models on this provider cost $0.00 — your key is never charged, no card needed">
+          <IconBolt size={12} /> 0-credit lane — FREE models never bill your key
+        </div>
+      ) : null}
+
       {p.needsKey ? (
         <div className="provider-keyrow">
           <div className="provider-keyinput">

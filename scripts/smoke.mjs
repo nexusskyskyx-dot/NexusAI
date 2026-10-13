@@ -1241,4 +1241,35 @@ function modelLabelSafeguard(p, m) {
   console.log(`[27] free-tier truth — gemini-3-flash era ✓ · cerebras demoted (paid) ✓ · openrouter quota honest ✓ · gemini-key auto-best ✓ · free set: ${free27.length} providers ✓`);
 }
 
+// 28 · zero-credit lanes — tokens that unlock free paid-class models, never billed
+{
+  const { PROVIDERS: P28, serializeProviders: sp28 } = await import('../shared/providers.js');
+
+  // the free-lane providers are flagged; metered providers are not
+  const must28 = ['gemini', 'github', 'openrouter', 'groq', 'mistral', 'zai', 'nvidia', 'cohere', 'huggingface'];
+  const flagged28 = P28.filter((p) => p.zeroCredit).map((p) => p.id);
+  for (const m of must28) if (!flagged28.includes(m)) throw new Error('zero-credit lane missing: ' + m);
+  for (const metered of ['openai', 'anthropic', 'deepseek', 'qwen', 'cerebras']) {
+    if (flagged28.includes(metered)) throw new Error(metered + ' must NOT claim zero-credit (it bills per token)');
+  }
+
+  // api serialization carries the flag
+  const ser28 = sp28().find((p) => p.id === 'github');
+  if (ser28.zeroCredit !== true) throw new Error('serializeProviders dropped the zeroCredit flag');
+
+  // UI: connected zero-credit provider renders the lane badge; metered never does
+  A11.setView('keys');
+  A11.setKeys({ github: 'github_pat_28AAAAAAA0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
+  const html28 = renderToString(React11.createElement(App));
+  if (!/0-credit lane/.test(html28)) throw new Error('zero-credit lane badge missing');
+  if (!/never bill your key/.test(html28)) throw new Error('never-billed promise copy missing');
+  // a metered provider with a key must NOT show the badge
+  A11.setKeys({ openai: 'sk-proj-28aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
+  const html28b = renderToString(React11.createElement(App));
+  const openaiSeg28 = html28b.slice(html28b.indexOf('ChatGPT'));
+  if (openaiSeg28.slice(0, 2000).includes('0-credit lane')) throw new Error('metered provider shows the zero-credit badge');
+  A11.removeKey('github'); A11.removeKey('openai');
+  console.log('[28] zero-credit lanes — 9 free-lane providers flagged ✓ · metered providers excluded ✓ · api flag ✓ · lane badge renders only where true ✓');
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');
