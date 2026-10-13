@@ -28,6 +28,7 @@ const hasCredential = (pid, s) => {
 const LADDERS = {
   chat: [
     ['gemini', 'gemini-3-flash'],
+    ['xkiro', 'mistralai/mistral-large-4-0'],
     ['openrouter', 'deepseek/deepseek-chat-v3-0324:free'],
     ['groq', 'llama-3.3-70b-versatile'],
     ['github', 'openai/gpt-4o'],
@@ -44,7 +45,9 @@ const LADDERS = {
     ['pollinations', 'openai'],
   ],
   code: [
+    ['xkiro', 'qwen/qwen3-coder-plus:free'],
     ['openrouter', 'qwen/qwen3-coder:free'],
+    ['xkiro', 'mistralai/codestral-2508'],
     ['groq', 'openai/gpt-oss-120b'],
     ['github', 'openai/gpt-4.1'],
     ['nvidia', 'qwen/qwen2.5-coder-32b-instruct'],
@@ -59,6 +62,7 @@ const LADDERS = {
   ],
   plan: [
     ['gemini', 'gemini-3-flash'],
+    ['xkiro', 'qwen/qwen3.7-flash:free'],
     ['groq', 'llama-3.3-70b-versatile'],
     ['openrouter', 'deepseek/deepseek-chat-v3-0324:free'],
     ['github', 'openai/gpt-4o-mini'],

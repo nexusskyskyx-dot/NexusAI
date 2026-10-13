@@ -34,6 +34,7 @@ const ENV_NAMES = {
   HF_TOKEN: 'huggingface',
   HUGGINGFACE_API_KEY: 'huggingface',
   ZAI_API_KEY: 'zai',
+  XKIRO_API_KEY: 'xkiro',
   Z_AI_API_KEY: 'zai',
   ZHIPU_API_KEY: 'zai',
 };
@@ -54,6 +55,7 @@ const EXPORT_NAME = {
   cohere: 'COHERE_API_KEY',
   huggingface: 'HF_TOKEN',
   zai: 'ZAI_API_KEY',
+  xkiro: 'XKIRO_API_KEY',
 };
 
 // key-prefix fingerprints, most-specific first

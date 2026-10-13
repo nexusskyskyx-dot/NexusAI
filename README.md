@@ -64,7 +64,7 @@ Every specialist has **its own prompt** (job + toolbox) — watch the whole stor
 - **Solo mode** — pick one model and chat directly, streamed.
 - **Image generation** — a dedicated **Image** mode: Flux / Turbo via Pollinations (free, no key) or DALL·E 3 / GPT-Image 1 via your OpenAI key. Choose aspect ratio and 1/2/4 variations per prompt.
 - **Image studio** — click any generated image to open the viewer + manual editor: zoom & pan (mouse or pinch), rotate, flip, brightness/contrast/saturation/hue/blur/grayscale/invert sliders, freehand drawing with color + size, undo, reset, copy to clipboard and PNG export at full resolution.
-- **16 chat providers** — DeepSeek, Qwen, Claude, GPT, **Gemini (Google AI Studio)**, **Groq**, **GitHub Models**, **Mistral**, **Cerebras**, **NVIDIA NIM**, **Cohere**, **Hugging Face**, **Z.ai GLM**, OpenRouter (free-tier models), zero-key **Pollinations** and an offline **Demo** model. Eleven of them have free tiers — no credit card.
+- **17 chat providers** — DeepSeek, Qwen, Claude, GPT, **Gemini (Google AI Studio)**, **Groq**, **GitHub Models**, **Mistral**, **Cerebras**, **NVIDIA NIM**, **Cohere**, **Hugging Face**, **Z.ai GLM**, **xKiro** (55 verified-free models: Mistral Large 4, Qwen3.8 Max, Command A+, LongCat…), OpenRouter (free-tier models), zero-key **Pollinations** and an offline **Demo** model. Twelve of them have free tiers — no credit card.
 - **Live code preview** — every HTML/CSS/JS code block gets a **Preview** button (sandboxed iframe + captured console).
 - **v1.21 redesign — OLED black + saturated blue, Inter bold** — pure `#000` OLED black surfaces with blue-tinted graphite depth, a **saturated electric-blue** accent (`#2f6bff`) on buttons, active states, glows and the wordmark, and **Inter bold typography** (700–900) across the interface. The **actual NEXUSAI logo** is wired in: drop your logo file at `public/logo.png` (or `.jpg`) and it becomes the brand everywhere — sidebar, hero — with the vector hexagon as an automatic fallback. Seven accent themes (blue · platinum · green · cyan · violet · amber · pink) in the sidebar, four views (Chat / Agents / Projects / Keys & Models) — the Canvas view was removed.
 - **Phone-friendly** — mobile-first responsive layout: drawer navigation, bottom-sheet model picker (with drag handle + slide-up), fullscreen agent pipeline, safe-area support and touch-sized targets.
@@ -134,14 +134,14 @@ NexusAI is built to run on a **$0 budget** — every component is free:
 
 - **You pay nothing to run it** — Node + Express, self-hosted; the browser-direct transport even works with static hosting alone (keys never touch a server).
 - **Users bring their own keys** (BYOK) — the startup carries zero inference cost, ever.
-- **10 zero-credit lanes** — Gemini 3 Flash (frontier-class, 1M ctx) · GitHub Models (free GPT-4o/4.1) · OpenRouter `:free` (DeepSeek/Kimi/Qwen/GLM) · Groq · Mistral · Z.ai · NVIDIA NIM · Cohere · Hugging Face · **Cloudflare Workers AI** (10k free neurons/day — key format `accountId:apiToken`) — plus keyless Pollinations chat & image relays that need no account at all.
+- **11 zero-credit lanes** — **xKiro** (55 verified-$0 models, ~5M tokens/day: Mistral Large 4, Qwen3.8 Max/Flash, Qwen3 Coder Plus, Cohere Command A+, North Mini Code, LongCat 2.5…) · Gemini 3 Flash (frontier-class, 1M ctx) · GitHub Models (free GPT-4o/4.1) · OpenRouter `:free` (DeepSeek/Kimi/Qwen/GLM) · Groq · Mistral · Z.ai · NVIDIA NIM · Cohere · Hugging Face · **Cloudflare Workers AI** (10k free neurons/day — key format `accountId:apiToken`) — plus keyless Pollinations chat & image relays that need no account at all.
 - **Free-lane health monitoring** — every connected zero-credit provider is pinged hourly with a 1-token request; when a free tier dies (like Cerebras did), the lane is marked `⚠ Free tier ended`, Auto-Best remaps your models, and forced cascades route around it. A dead free tier never burns a user.
 - **Everything else is free infrastructure** — Jina reader (page fetching), Wikipedia/DuckDuckGo/MDN/GitHub search, design gallery references, and an offline demo model so the whole pipeline works with no network and no keys.
 
 ## 🗂 Project layout
 
 ```
-shared/providers.js   Provider registry — 16 chat providers (11 free paths) + image providers (client+server)
+shared/providers.js   Provider registry — 17 chat providers (12 free paths) + image providers (client+server)
 server/index.js       Express: static hosting + /api proxy + /api/fetch live page reader + health
 server/demo.js        Offline demo model (test everything with zero setup)
 src/lib/ai.js         Transport layer: direct-browser ⇄ proxy, SSE parsing

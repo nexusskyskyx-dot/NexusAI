@@ -1311,4 +1311,57 @@ function modelLabelSafeguard(p, m) {
   console.log('[29] $0 mode — cloudflare dual-credential lane ✓ · lane health verdicts (ok/dead/unknown) ✓ · dead lane demoted by auto-best ✓ · UI status + hint ✓');
 }
 
+// 30 · xKiro gateway — 55 free models, verified IDs only
+{
+  const { getProvider: gp30 } = await import('../shared/providers.js');
+  const { autoConfigure: ac30 } = await import('../src/lib/autobest.js');
+  const { parseKeys: pk30 } = await import('../src/lib/keydetect.js');
+
+  const xk30 = gp30('xkiro');
+  if (!xk30 || xk30.free !== true || xk30.zeroCredit !== true) throw new Error('xkiro not a free zero-credit lane');
+  if (xk30.baseUrl !== 'https://api.xkiro.com/v1/chat/completions') throw new Error('xkiro url wrong');
+  if (xk30.models.length < 12) throw new Error('xkiro catalog too small');
+
+  // every listed model is one of the VERIFIED $0 IDs from xkiro.com/models —
+  // paid models (deepseek/minimax/gpt/claude on xKiro) must never appear
+  const verifiedFree30 = new Set([
+    'mistralai/mistral-large-4-0', 'mistralai/mistral-medium-3.5', 'mistralai/mistral-small-2603',
+    'mistralai/codestral-2508', 'mistralai/devstral-medium', 'mistralai/ministral-14b', 'mistralai/ministral-8b', 'mistralai/ministral-3b',
+    'qwen/qwen3.8-max:free', 'qwen/qwen3.7-flash:free', 'qwen/qwen3-coder-plus:free', 'qwen/qwen3.5-plus:free',
+    'qwen/qwen3-max:free', 'qwen/qwen-plus-2025-07-28:free', 'qwen/qwen3.6-plus:free',
+    'cohere/command-a-plus', 'cohere/command-a', 'cohere/north-mini-code', 'cohere/command-a-reasoning', 'cohere/command-a-vision',
+    'meituan/longcat-2.0', 'meituan/longcat-2.5-preview:free',
+    'meta/muse-spark-1.2-contributor:free', 'meta/muse-spark-1.3-contributor:free',
+    'stealth/big-pickle', 'stealth/space-bunny-alpha:free', 'sensenova/sensenova-6.8-flash-lite',
+    'apodex/apodex-1.1-mini:free', 'dots-studio/dots-3-note-preview:free', 'inclusionai/ling-3.0-flash-sante:free', 'liquid/lfm-2.5-2.6b:free',
+  ]);
+  for (const m of xk30.models) {
+    if (!verifiedFree30.has(m.id)) throw new Error('unverified/paid model listed: ' + m.id);
+    if (!m.tags.includes('FREE')) throw new Error('xkiro model missing FREE tag: ' + m.id);
+  }
+  const ids30 = xk30.models.map((m) => m.id);
+  if (new Set(ids30).size !== ids30.length) throw new Error('duplicate xkiro ids');
+
+  // auto-best: an xKiro key promotes chat to Mistral Large 4, code to Qwen3 Coder Plus
+  const st30 = { keys: { xkiro: 'xk_test_key_0123456789abcdef' }, envKeys: [], solo: { provider: 'pollinations', model: 'openai' }, squad: { workers: [{ provider: 'pollinations', model: 'qwen-coder' }], planner: { provider: 'pollinations', model: 'mistral' }, critic: {}, synth: {} }, prj: { provider: 'pollinations', model: 'qwen-coder' }, image: {} };
+  const cfg30 = ac30(st30);
+  if (cfg30.solo.provider !== 'xkiro' || cfg30.solo.model !== 'mistralai/mistral-large-4-0') throw new Error('xkiro chat promotion wrong: ' + JSON.stringify(cfg30.solo));
+  if (cfg30.squad.workers[0].provider !== 'xkiro' || cfg30.squad.workers[0].model !== 'qwen/qwen3-coder-plus:free') throw new Error('xkiro code promotion wrong');
+  if (cfg30.prj.provider !== 'xkiro') throw new Error('xkiro project promotion wrong');
+
+  // .env detection round-trip
+  const rows30 = pk30('XKIRO_API_KEY=xk_envtest_0123456789abcd');
+  if (rows30[0]?.provider !== 'xkiro') throw new Error('XKIRO_API_KEY not detected');
+
+  // UI renders the provider with its models
+  A11.setView('keys');
+  A11.setKeys({ xkiro: 'xk_render_test_0123456789' });
+  const html30 = renderToString(React11.createElement(App));
+  if (!/xKiro/.test(html30)) throw new Error('xkiro provider card missing');
+  if (!/0-credit lane/.test(html30)) throw new Error('xkiro zero-credit badge missing');
+  if (!/Mistral Large 4/.test(html30)) throw new Error('mistral large 4 missing from card');
+  A11.removeKey('xkiro');
+  console.log(`[30] xKiro — ${xk30.models.length} verified-free models ✓ · no paid models leaked ✓ · auto-best promotions ✓ · env detection ✓ · card renders ✓`);
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');
