@@ -1028,6 +1028,61 @@ input[type='range'] { accent-color: var(--acc); width: 170px; }
 .worksum.static { cursor: default; }
 .worksum.static:hover { border-color: var(--line2); color: var(--txt3); }
 
+/* ── v1.19 · main loader — N hexagon pulsing blue + crossfading phase text ── */
+.nx-loader { display: flex; align-items: center; gap: 14px; padding: 6px 2px; }
+.nx-hex {
+  position: relative; display: grid; place-items: center; flex-shrink: 0;
+  --acc: #6db3ff; --acc2: #b7dcff; /* loader blue — independent of theme */
+  animation: nxPulse 2.1s ease-in-out infinite;
+}
+.nx-hex::before {
+  content: ''; position: absolute; inset: -34%; border-radius: 50%;
+  background: radial-gradient(circle, rgba(96, 165, 250, 0.30) 0%, rgba(96, 165, 250, 0.08) 45%, transparent 70%);
+  animation: nxGlow 2.1s ease-in-out infinite; pointer-events: none;
+}
+.nx-hex::after {
+  content: ''; position: absolute; inset: -14%; border-radius: 50%;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  animation: nxRing 2.1s ease-out infinite; pointer-events: none;
+}
+@keyframes nxPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes nxGlow { 0%, 100% { opacity: 0.45; transform: scale(0.92); } 50% { opacity: 1; transform: scale(1.12); } }
+@keyframes nxRing { 0% { opacity: 0.65; transform: scale(0.85); } 75% { opacity: 0; transform: scale(1.25); } 100% { opacity: 0; } }
+.nx-loader-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.nx-loader-title { font-family: var(--font-d); font-size: 13.5px; font-weight: 700; color: var(--txt); display: flex; align-items: center; }
+.nx-loader-sub { font-size: 11px; color: var(--txt3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ft { position: relative; display: inline-block; }
+.ft-in { display: inline-block; animation: ftIn 0.6s cubic-bezier(0.22, 0.68, 0.32, 1); }
+.ft-out { position: absolute; left: 0; top: 0; white-space: nowrap; animation: ftOut 0.6s cubic-bezier(0.22, 0.68, 0.32, 1) forwards; }
+@keyframes ftIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@keyframes ftOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-7px); } }
+
+/* ── folded badges — the after-run summary ─────────────────────────────────── */
+.foldrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.fold { display: inline-flex; flex-direction: column; min-width: 0; max-width: 100%; }
+.fold-head {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg1); border: 1px solid var(--line); border-radius: 999px;
+  color: var(--txt2); font-family: var(--font-d); font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em;
+  padding: 5px 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.fold-head:hover { border-color: var(--acc); color: var(--txt); }
+.fold.open .fold-head { border-color: var(--acc-soft); background: var(--acc-dim); color: var(--txt); border-radius: 10px 10px 0 0; }
+.fold-caret { transition: transform 0.2s; }
+.fold.open .fold-caret { transform: rotate(180deg); }
+.fold.ok .fold-head { color: var(--acc); border-color: var(--acc-soft); }
+.fold.warn .fold-head { color: var(--warn); border-color: rgba(230, 162, 60, 0.4); }
+.fold-body {
+  border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px;
+  background: var(--bg1); padding: 10px 12px; margin-top: -1px;
+  font-size: 12px; color: var(--txt2); line-height: 1.55; max-width: 560px;
+  animation: fadeUp 0.18s ease;
+}
+.fold-line { padding: 2px 0; }
+.fold-links { display: flex; flex-direction: column; gap: 6px; }
+.fold-links a { color: var(--acc); text-decoration: none; font-weight: 600; border-bottom: 1px solid var(--acc-soft); width: fit-content; }
+.fold-pre { margin: 0; white-space: pre-wrap; font: 11.5px/1.55 var(--mono); color: var(--txt2); max-height: 220px; overflow-y: auto; }
+
 .img-grid { display: grid; gap: 10px; margin: 4px 0; }
 .img-grid.n1 { grid-template-columns: 1fr; max-width: 560px; }
 .img-grid.n2 { grid-template-columns: 1fr 1fr; max-width: 640px; }
@@ -1732,6 +1787,7 @@ body {
 /* project chat: live phase loader */
 .pc-loader {
   display: flex; align-items: center; gap: 12px;
+  --acc: #6db3ff; --acc2: #b7dcff; /* loader blue */
   border: 1px solid color-mix(in srgb, var(--acc) 22%, var(--line));
   background: linear-gradient(160deg, var(--bg1), var(--bg));
   border-radius: 13px; padding: 11px 12px; margin-bottom: 9px;

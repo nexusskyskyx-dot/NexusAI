@@ -413,7 +413,7 @@ if (!done11) throw new Error('chat generation did not finish in 90s');
 sweep11('chat · team finished');
 {
   const html = renderToString(React11.createElement(App));
-  if (!html.includes('worksum')) throw new Error('finished team message missing the collapsed worklog summary');
+  if (!html.includes('foldrow')) throw new Error('finished team message missing the folded badges');
   if (!/pomodoro/i.test(html)) throw new Error('final answer content missing');
 }
 
@@ -697,8 +697,9 @@ console.log(`[15] open air — input-first composer ✓ · one intent chip, zero
     { stage: 'research', status: 'done' }, { stage: 'enhance', status: 'done' }, { stage: 'generate', status: 'run', detail: 'image 1/1' },
   ] };
   const htmlRun17 = renderToString(React11.createElement(Message17, { msg: msgRun17, isLast: true }));
-  if (!/Enhancing|Painting|Searching/.test(htmlRun17)) throw new Error('image worklog phases missing mid-run');
-  if (!/Image Team at work|Websearcher/.test(htmlRun17)) throw new Error('image team wait copy missing');
+  if (!/NEXUSAI is (drawing|thinking|searching)/i.test(htmlRun17)) throw new Error('main loader phase text missing mid-run');
+  if (!htmlRun17.includes('nx-hex')) throw new Error('pulsing hexagon loader missing mid-run');
+  if (!/Websearcher · Enhancer · Image Tools · Upscaler · Previewer/.test(htmlRun17)) throw new Error('image team roster line missing');
   const msgDone17 = { id: 'm17d', role: 'assistant', kind: 'image', mode: 'image', streaming: false, ms: 24000, images: [
     { src: 'blob:z', w: 1024, h: 1024, model: 'flux', check: 'pass', upscaled: true },
   ], istages: [
@@ -706,7 +707,7 @@ console.log(`[15] open air — input-first composer ✓ · one intent chip, zero
     { stage: 'upscale', status: 'done' }, { stage: 'check', status: 'done' },
   ], enhancedPrompt: 'a colossal ember dragon, volumetric light, 85mm, ultra detailed' };
   const htmlDone17 = renderToString(React11.createElement(Message17, { msg: msgDone17, isLast: false }));
-  for (const piece of ['✓ Searched', '✓ Enhanced', '✓ Painted', '✓ Sharpened', '✓ Verified', 'sharpened', 'ember dragon']) {
+  for (const piece of ['Searched', 'Enhanced', 'Drew 1 image', 'Sharpened', 'Previewed — 1/1 PASS', 'sharpened', 'ember dragon']) {
     if (!htmlDone17.includes(piece)) throw new Error('finished image message missing: ' + piece);
   }
   console.log(`[17] image team — research→enhance→generate→upscale→check ✓ · retry-on-fail ✓ (${checks17.join(',')}) · deterministic fallback ✓ · all-fail warns ✓ · worklog UI ✓`);
@@ -938,6 +939,41 @@ console.log(`[15] open air — input-first composer ✓ · one intent chip, zero
 }
 function modelLabelSafeguard(p, m) {
   try { return ml21 ? ml21(p, m) : ''; } catch { return ''; }
+}
+
+// 22 · main loader + folded badges — the unified loading experience
+{
+  const NL22 = await import('../src/components/NexusLoader.jsx');
+  if (!NL22.LOADER_TEXT.thinking || !NL22.LOADER_TEXT.searching || !NL22.LOADER_TEXT.drawing) throw new Error('phase texts missing');
+  for (const p of ['thinking','searching','planning','designing','coding','drawing','writing','testing','previewing']) {
+    if (!/NEXUSAI is /.test(NL22.LOADER_TEXT[p])) throw new Error('phase text wrong: ' + p);
+  }
+  if (NL22.TEAM_PHASE.research !== 'searching' || NL22.IMAGE_PHASE.generate !== 'drawing' || NL22.PROJECT_PHASE.Testing !== 'testing') throw new Error('stage maps wrong');
+
+  // loader renders: hexagon + crossfade text + sub detail
+  const htmlL22 = renderToString(React11.createElement(NL22.default, { phase: 'coding', sub: 'writing js/app.js' }));
+  for (const piece of ['nx-hex', 'nx-loader', 'NEXUSAI is coding…', 'writing js/app.js']) {
+    if (!htmlL22.includes(piece)) throw new Error('loader missing: ' + piece);
+  }
+
+  // crossfade CSS exists (in AND out animations = fading start→end and end→start)
+  const css22 = (await import('node:fs')).readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  for (const piece of ['@keyframes ftIn', '@keyframes ftOut', '@keyframes nxPulse', '@keyframes nxGlow', '@keyframes nxRing', '.fold-head', '.fold-body', '--acc: #6db3ff']) {
+    if (!css22.includes(piece)) throw new Error('loader/badge css missing: ' + piece);
+  }
+
+  // Fold: folded by default, opens on click (state) — render closed then verify no body
+  const { Fold: Fold22 } = NL22;
+  const foldClosed22 = renderToString(React11.createElement(Fold22, { label: 'Coded 5 files' }, 'detail here'));
+  if (!foldClosed22.includes('Coded 5 files') || !foldClosed22.includes('fold-head')) throw new Error('fold badge head missing');
+  if (foldClosed22.includes('detail here')) throw new Error('fold is open by default — must be folded');
+
+  // solo finished message gets the Thought-for badge
+  const Message22 = (await import('../src/components/Message.jsx')).default;
+  const msg22 = { id: 's22', role: 'assistant', mode: 'solo', kind: undefined, streaming: false, ms: 5200, content: 'answer text here', reasoning: 'chain of thought' };
+  const htmlS22 = renderToString(React11.createElement(Message22, { msg: msg22, isLast: false }));
+  if (!/Thought for 5\.2s/.test(htmlS22)) throw new Error('solo thought-time badge missing');
+  console.log('[22] main loader — 9 phase texts ✓ · hexagon+crossfade+sub ✓ · css (ftIn/ftOut/nxPulse/nxGlow/nxRing) ✓ · folds folded-by-default ✓ · solo thought badge ✓');
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');

@@ -6,6 +6,7 @@ import { assemblePreview, ROLE_META } from '@lib/projects.js';
 import { makeZip } from '@lib/zip.js';
 import hljs from 'highlight.js/lib/common';
 import { IconFolder, IconRocket, IconPlus, IconTrash, IconDownload, IconExternal, IconRefresh, IconCopy, IconCheck, IconTerminal, IconStop, IconSend, IconChat } from './Icons.jsx';
+import NexusLoader, { PROJECT_PHASE } from './NexusLoader.jsx';
 
 const IDEAS = [
   { title: 'Neon pomodoro timer', sub: 'focus timer with sessions', idea: 'A neon OLED-dark pomodoro timer web app with work/break sessions, a big circular countdown, session counter and keyboard shortcuts.' },
@@ -327,13 +328,7 @@ function ChatPane({ project, pane }) {
       <footer className="pchat-composer">
         {busy ? (
           <div className="pc-loader">
-            <span className="shimmer pc-loader-shimmer" />
-            <div className="pc-loader-body">
-              <span className="pc-loader-title">
-                <span className="led" /> {phase.title}…
-              </span>
-              <span className="pc-loader-sub">{phase.sub}</span>
-            </div>
+            <NexusLoader phase={PROJECT_PHASE[phase.title] || 'thinking'} sub={phase.sub} size={34} />
             <button className="icon-btn" onClick={() => actions.stopProject()} title="Stop the team">
               <IconStop size={14} />
             </button>

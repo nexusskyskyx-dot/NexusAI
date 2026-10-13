@@ -5,6 +5,7 @@ import { previewableLang, extForLang } from '@lib/preview.js';
 import { recoverChain } from '@lib/images.js';
 import { modelLabel } from '@shared/providers.js';
 import { IconCopy, IconCheck, IconRefresh, IconTrash, IconEdit, IconBrain, IconAgents, IconEye } from './Icons.jsx';
+import NexusLoader, { Fold, FoldRow, TEAM_PHASE, IMAGE_PHASE } from './NexusLoader.jsx';
 
 // ── work phases: what the team is doing right now ─────────────────────────────
 // while working: title + what item is being handled → after: collapsed ✓ titles
@@ -23,6 +24,7 @@ function WorkLog({ msg }) {
   const phases = msg.stages.map((x) => x.stage).filter((x) => x !== 'done' && PHASE_DONE[x]);
   if (!phases.length) return null;
 
+  // ── while working: the main loader — hexagon pulsing blue, crossfading text
   if (msg.streaming) {
     const active = phases[phases.length - 1];
     const running = (msg.agents || []).filter((a) => a.status === 'running');
@@ -32,71 +34,75 @@ function WorkLog({ msg }) {
           .slice(0, 4)
           .join(' · ')
       : PHASE_SUB[active];
-    return (
-      <div className="worklog">
-        {phases.slice(0, -1).map((st) => (
-          <div key={st} className="wstep done">
-            ✓ {PHASE_DONE[st]}
-          </div>
-        ))}
-        <div className="wstep active">
-          <span className="wstep-title">
-            <span className="led" /> {PHASE_NOW[active]}…
-          </span>
-          <span className="wstep-sub">{detail}</span>
-        </div>
-      </div>
-    );
+    return <NexusLoader phase={TEAM_PHASE[active] || 'thinking'} sub={detail} size={34} />;
   }
 
-  // finished → one collapsed line of completed titles
+  // ── after: small folded badges — click to unfold details
+  const nDrafters = (msg.agents || []).filter((a) => /draft|worker/i.test(a.role || '')).length;
+  const agentText = (role) => {
+    const a = (msg.agents || []).find((x) => x.role === role && x.text);
+    return a?.text ? a.text.slice(0, 700) : null;
+  };
+  const secs = msg.ms ? (msg.ms / 1000).toFixed(1) + 's' : null;
   return (
-    <button className="worksum" onClick={() => actions.setAgentsOpen(true)} title="Open the agent pipeline">
-      <IconAgents size={12} />
-      {phases.map((st) => `✓ ${PHASE_DONE[st]}`).join(' · ')}
-      {msg.ms ? <span className="worksum-ms">{(msg.ms / 1000).toFixed(1)}s</span> : null}
-    </button>
+    <FoldRow>
+      {phases.includes('research') ? (
+        <Fold label={`Searched ${msg.sources?.length || 'the web'}`}>
+          {msg.sources?.length ? (
+            <div className="fold-links">
+              {msg.sources.slice(0, 8).map((s, i) => (
+                <a key={i} href={s.url} target="_blank" rel="noreferrer">{s.read ? '📖' : s.source === 'github' ? '⭑' : s.source === 'wikipedia' ? '📚' : '🦆'} {s.title}</a>
+              ))}
+            </div>
+          ) : 'Researched the web for accurate, current knowledge.'}
+        </Fold>
+      ) : null}
+      {phases.includes('plan') ? <Fold label="Planned">{agentText('planner') || 'The planner wrote the brief.'}</Fold> : null}
+      {phases.includes('draft') ? (
+        <Fold label={`Coded ${nDrafters || 'the'} draft${nDrafters === 1 ? '' : 's'}`}>
+          {(msg.agents || []).filter((a) => /draft|worker/i.test(a.role || '')).map((a, i) => (
+            <div key={i} className="fold-line">{modelLabel(a.provider, a.model)} — {a.status}</div>
+          ))}
+        </Fold>
+      ) : null}
+      {phases.includes('review') ? <Fold label="Reviewed">{agentText('critic') || 'The reviewer compared the drafts.'}</Fold> : null}
+      {phases.includes('synthesize') ? <Fold label={`Synthesized${secs ? ' · ' + secs : ''}`}>{agentText('synth') || 'The synthesizer shipped the final answer.'}</Fold> : null}
+    </FoldRow>
   );
 }
 
-// ── image team phases (v1.16): same quiet-worklog pattern as the chat team ──
-const IMG_DONE = { research: 'Searched', enhance: 'Enhanced', generate: 'Painted', upscale: 'Sharpened', check: 'Verified' };
-const IMG_NOW = { research: 'Searching references', enhance: 'Enhancing the prompt', generate: 'Painting', upscale: 'Upscaling & sharpening', check: 'Checking the result' };
-const IMG_SUB = { research: 'what the subject really looks like', enhance: 'rewriting for max quality', generate: 'image tools at work', upscale: 'unsharp mask pass', check: 'pass / fail gate' };
+// ── image team: main loader while painting → folded badges after ─────────────
+const IMG_ROSTER = 'Websearcher · Enhancer · Image Tools · Upscaler · Previewer';
 
 function ImageLog({ msg }) {
   if (msg.kind !== 'image' || !msg.istages?.length) return null;
   if (msg.streaming) {
     const runs = msg.istages.filter((x) => x.status === 'run');
     const active = runs[runs.length - 1];
-    if (!active) return null;
-    const done = new Set();
-    for (const x of msg.istages) {
-      if (x.status === 'done' || x.status === 'fail' || x.status === 'skip') done.add(x.stage);
-      if (x.status === 'run') done.delete(x.stage);
-    }
-    const order = ['research', 'enhance', 'generate', 'upscale', 'check'];
-    const prev = order.filter((st) => done.has(st) && st !== active.stage);
-    return (
-      <div className="worklog">
-        {prev.map((st) => (
-          <div key={st} className="wstep done">✓ {IMG_DONE[st]}</div>
-        ))}
-        <div className="wstep active">
-          <span className="wstep-title"><span className="led" /> {IMG_NOW[active.stage]}…</span>
-          <span className="wstep-sub">{active.detail || IMG_SUB[active.stage]}</span>
-        </div>
-      </div>
-    );
+    const detail = active?.detail || IMG_ROSTER;
+    return <NexusLoader phase={IMAGE_PHASE[active?.stage] || 'drawing'} sub={detail} size={34} />;
   }
-  const done = [...new Set(msg.istages.filter((x) => x.status === 'done').map((x) => x.stage))];
-  if (!done.length) return null;
+  const done = new Set(msg.istages.filter((x) => x.status === 'done').map((x) => x.stage));
+  if (!done.size) return null;
+  const nImg = msg.images?.length || 0;
+  const passCount = (msg.images || []).filter((i) => i.check === 'pass').length;
+  const upscaled = (msg.images || []).some((i) => i.upscaled);
+  const secs = msg.ms ? (msg.ms / 1000).toFixed(1) + 's' : null;
   return (
-    <div className="worksum static" title="Image Team pipeline">
-      <IconAgents size={12} />
-      {done.map((st) => `✓ ${IMG_DONE[st]}`).join(' · ')}
-      {msg.ms ? <span className="worksum-ms">{(msg.ms / 1000).toFixed(1)}s</span> : null}
-    </div>
+    <FoldRow>
+      {done.has('research') ? <Fold label="Searched">Researched visual references for the subject.</Fold> : null}
+      {done.has('enhance') ? <Fold label="Enhanced">{msg.enhancedPrompt || 'The prompt was rewritten for maximum quality.'}</Fold> : null}
+      {done.has('generate') ? <Fold label={`Drew ${nImg} image${nImg === 1 ? '' : 's'}`}>{msg.images?.map((im, i) => <div key={i} className="fold-line">{im.model} · {im.w}×{im.h}{im.upscaled ? ' · sharpened' : ''}</div>)}</Fold> : null}
+      {done.has('upscale') && upscaled ? <Fold label="Sharpened">Unsharp-mask + color grade pass for crisp output.</Fold> : null}
+      {done.has('check') ? (
+        <Fold label={`Previewed — ${passCount}/${Math.max(nImg, 1)} PASS${secs ? ' · ' + secs : ''}`} tone={passCount === nImg && nImg > 0 ? 'ok' : 'warn'}>
+          {(msg.images || []).map((im, i) => (
+            <div key={i} className="fold-line">image {i + 1}: {im.check === 'pass' ? '✓ passed the quality gate' : '⚠ failed checks'}</div>
+          ))}
+          {msg.error ? <div className="fold-line">{msg.error}</div> : null}
+        </Fold>
+      ) : null}
+    </FoldRow>
   );
 }
 
@@ -299,6 +305,13 @@ export default function Message({ msg, isLast }) {
       ) : null}
 
       <WorkLog msg={msg} />
+      {msg.kind !== 'image' && msg.mode !== 'team' && !msg.streaming && msg.ms ? (
+        <FoldRow>
+          <Fold label={`Thought for ${(msg.ms / 1000).toFixed(1)}s`}>
+            {msg.reasoning?.trim() ? <pre className="fold-pre">{msg.reasoning}</pre> : <div className="fold-line">{msg.model || 'the model'} answered directly{msg.sources?.length ? ` · ${msg.sources.length} sources` : ''}.</div>}
+          </Fold>
+        </FoldRow>
+      ) : null}
       <Reasoning text={msg.reasoning} />
 
       {msg.sources?.length ? (
@@ -322,27 +335,14 @@ export default function Message({ msg, isLast }) {
             ))}
           </div>
         ) : (
-          <div className="msg-ai-wait">
-            <span className="shimmer" />
-            <span className="wait-label">
-              {msg.istages?.length ? 'Image Team at work' : 'Painting your image'}<span className="wait-dots">…</span>
-            </span>
-            <span className="wait-sub">{msg.istages?.length ? 'Websearcher · Enhancer · Image Tools · Upscaler · Previewer' : msg.model}</span>
-          </div>
+          <NexusLoader phase={msg.istages?.length ? IMAGE_PHASE[msg.istages.filter((x) => x.status === 'run').slice(-1)[0]?.stage] || 'drawing' : 'drawing'} sub={msg.istages?.length ? 'Websearcher · Enhancer · Image Tools · Upscaler · Previewer' : msg.model} size={34} />
         )}
           {msg.images?.length && !msg.streaming && msg.enhancedPrompt ? (
             <div className="img-enhanced" title={msg.enhancedPrompt}>✨ {msg.enhancedPrompt}</div>
           ) : null}
         </>
       ) : empty && !(msg.mode === 'team' && msg.stages?.length) ? (
-        <div className="msg-ai-wait">
-          <span className="shimmer" />
-          <span className="wait-label">
-            {msg.mode === 'team' ? PHASE_NOW[lastStage] || 'Thinking' : 'Thinking'}
-            <span className="wait-dots">…</span>
-          </span>
-          <span className="wait-sub">{msg.mode === 'team' ? PHASE_SUB[lastStage] || 'preparing' : ''}</span>
-        </div>
+        <NexusLoader phase="thinking" sub={msg.mode === 'team' ? PHASE_SUB[lastStage] || 'preparing' : msg.model || null} size={34} />
       ) : (
         <div ref={bodyRef} className={`md ${msg.streaming ? 'streaming' : ''}`} dangerouslySetInnerHTML={{ __html: html }} />
       )}
