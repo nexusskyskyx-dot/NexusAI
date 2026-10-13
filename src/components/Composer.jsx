@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useStore, actions, hasCredential } from '../store.js';
-import { PROVIDERS, IMAGE_PROVIDERS } from '@shared/providers.js';
+import { PROVIDERS, IMAGE_PROVIDERS, modelLabel } from '@shared/providers.js';
+import ModelOptions from './ModelPicker.jsx';
 import { IMAGE_ASPECTS } from '@lib/images.js';
 import { IconSend, IconStop, IconAgents, IconBolt, IconImage, IconChevron, IconDownload, IconSettings } from './Icons.jsx';
-import { detectIntent, INTENT_LABEL } from '@lib/intent.js';
+import { detectIntent, INTENT_GLYPH } from '@lib/intent.js';
 
 export default function Composer() {
   const s = useStore();
@@ -42,11 +43,30 @@ export default function Composer() {
 
   // 🧭 live verdict — what the user typed decides where it goes
   const intent = text.trim() && auto ? detectIntent(text) : null;
-  const chipLabel = !auto
-    ? INTENT_LABEL[mode] || '⬡ Team'
+
+  // the effective lane this message will take (mirrors store.generate routing)
+  const effLane = !auto
+    ? mode
     : intent
-    ? INTENT_LABEL[intent.mode]
-    : '🧭 Auto';
+    ? intent.mode === 'image'
+      ? 'image'
+      : intent.mode === 'search' || intent.smalltalk
+      ? 'solo'
+      : s.settings.mode || 'team'
+    : s.settings.mode || 'team';
+
+  // the chip IS the model picker: it names the model that will answer
+  const workers = (s.squad.workers || []).filter((w) => w && w.model).length;
+  const chipModel =
+    effLane === 'image'
+      ? (() => {
+          const ip = IMAGE_PROVIDERS.find((p) => p.id === img.provider) || IMAGE_PROVIDERS[0];
+          return (ip.models.find((m) => m.id === img.model) || ip.models[0] || {}).label || 'Image';
+        })()
+      : effLane === 'solo'
+      ? modelLabel(s.solo.provider, s.solo.model)
+      : `Team · ${workers} drafters`;
+  const chipGlyph = !auto ? INTENT_GLYPH[mode] : intent ? INTENT_GLYPH[intent.mode] : '🧭';
 
   const exportChat = () => {
     const conv = s.conversations.find((x) => x.id === s.activeId);
@@ -98,12 +118,13 @@ export default function Composer() {
 
         <div className="composer-bar">
           <button
-            className={`intent-chip ${intent ? 'live' : ''}`}
+            className={`intent-chip model ${intent ? 'live' : ''}`}
             onClick={() => setMenuOpen(true)}
-            title={auto ? 'Auto-detected destination — click to change' : 'Manual mode — click to change'}
+            title={auto ? `${chipGlyph} auto-routed · answers with ${chipModel} — click to pick models` : `${chipGlyph} ${mode} mode · ${chipModel} — click to pick models`}
           >
             <span className="intent-led" />
-            {chipLabel}
+            <span className="intent-glyph">{chipGlyph}</span>
+            <span className="intent-model">{chipModel}</span>
             <IconChevron size={12} />
           </button>
 
@@ -129,28 +150,11 @@ export default function Composer() {
                   {s.settings.web !== false ? 'On' : 'Off'}
                 </button>
               </div>
-              <div className="mm-row">
-                <span className="mm-label">Chat model</span>
-                <select
-                  className="mm-select"
-                  value={s.solo.provider + '/' + s.solo.model}
-                  onChange={(e) => {
-                    const [provider, ...rest] = e.target.value.split('/');
-                    actions.setSolo({ provider, model: rest.join('/') });
-                  }}
-                >
-                  {PROVIDERS.filter((p) => p.id !== 'demo' && (!p.needsKey || hasCredential(p.id, s))).map((p) => (
-                    <optgroup key={p.id} label={p.name}>
-                      {(s.liveModels[p.id] || p.models).map((m) => (
-                        <option key={p.id + m.id} value={p.id + '/' + m.id}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
+              <div className="mm-models">
+                <span className="mm-label">Picks the model that answers{effLane === 'team' ? ' (solo lane · team uses the squad)' : ''}</span>
+                <ModelOptions value={s.solo} onChange={(v) => actions.setSolo(v)} />
               </div>
-              {mode === 'image' || intent?.mode === 'image' ? (
+              {effLane === 'image' ? (
                 <>
                   <div className="mm-row">
                     <span className="mm-label">Image model</span>

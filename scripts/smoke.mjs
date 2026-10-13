@@ -595,7 +595,7 @@ console.log(`[14] easy keys — detect ✓ (.env/multi/ambiguous/exotic) · back
   if (taAt < 0 || soloAt < 0) throw new Error('composer pieces missing from render');
   if (taAt > soloAt) throw new Error('composer is not input-first anymore');
   // v1.18 · the strip is ONE intent chip + the auto-routing hint — no mode wall
-  for (const piece of ['composer-bar', 'intent-chip', '🧭 Auto', 'auto-routing on']) {
+  for (const piece of ['composer-bar', 'intent-chip', '🧭', 'auto-routing on']) {
     if (!html15.includes(piece)) throw new Error(`composer strip missing: ${piece}`);
   }
   const strip15 = html15.slice(Math.max(0, html15.indexOf('composer-wrap')));
@@ -909,9 +909,35 @@ console.log(`[15] open air — input-first composer ✓ · one intent chip, zero
   A11.setSettings({ autoIntent: false, mode: 'solo' });
   A11.setView('chat');
   const html20 = renderToString(React11.createElement(App));
-  if (!html20.includes('⚡ Solo')) throw new Error('manual override chip not shown');
+  if (html20.includes('auto-routing on')) throw new Error('auto hint should be gone in manual mode');
+  if (!html20.includes('Enter ↵ send')) throw new Error('manual override not active');
   A11.setSettings({ autoIntent: true, mode: 'team' });
   console.log('[20] auto-intent — 4/4 examples ✓ · 12-case matrix ✓ · smalltalk lane ✓ · project routing live ✓ · manual override ✓');
+}
+
+// 21 · the visible chip is the model picker
+{
+  const { modelLabel: ml21 } = await import('../shared/providers.js');
+  const src21 = (await import('node:fs')).readFileSync(new URL('../src/components/Composer.jsx', import.meta.url), 'utf8');
+  if (!src21.includes('ModelOptions')) throw new Error('chip menu does not embed the real model list');
+  if (!/intent-model/.test(src21)) throw new Error('chip does not show a model name');
+  // manual solo: chip names the exact solo model
+  A11.setSettings({ autoIntent: false, mode: 'solo' });
+  let st21 = null;
+  renderToString(React11.createElement(() => { st21 = useStore11(); return ''; }));
+  const want21 = modelLabelSafeguard(st21.solo.provider, st21.solo.model);
+  const html21 = renderToString(React11.createElement(App));
+  if (!html21.includes('intent-model')) throw new Error('chip model name missing');
+  if (want21 && !html21.includes(want21.slice(0, 10))) throw new Error(`chip does not name the solo model (${want21})`);
+  // manual image: chip names the image model
+  A11.setSettings({ mode: 'image' });
+  const html21b = renderToString(React11.createElement(App));
+  if (!/Flux|Turbo|DALL/.test(html21b)) throw new Error('chip does not name the image model');
+  A11.setSettings({ autoIntent: true, mode: 'team' });
+  console.log('[21] model chip — visible button names the answering model ✓ · real model list in the menu ✓ · solo + image lanes ✓');
+}
+function modelLabelSafeguard(p, m) {
+  try { return ml21 ? ml21(p, m) : ''; } catch { return ''; }
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');

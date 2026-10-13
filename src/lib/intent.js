@@ -56,3 +56,8 @@ export const INTENT_LABEL = {
   solo: '⚡ Solo',
   team: '⬡ Team',
 };
+
+// glyph-only map for the composer chip
+export const INTENT_GLYPH = {
+  image: '🎨', project: '🛠', search: '🔍', chat: '💬', solo: '⚡', team: '⬡',
+};
