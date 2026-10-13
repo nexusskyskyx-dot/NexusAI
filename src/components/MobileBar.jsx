@@ -2,7 +2,7 @@ import React from 'react';
 import { useStore, actions } from '../store.js';
 import { Logo, IconMenu, IconPlus } from './Icons.jsx';
 
-const VIEW_LABELS = { chat: 'Chat', agents: 'Agents', projects: 'Projects', canvas: 'Canvas', keys: 'Keys & Models' };
+const VIEW_LABELS = { chat: 'Chat', agents: 'Agents', projects: 'Projects', keys: 'Keys & Models' };
 
 // Slim top bar shown only on phones — opens the sidebar drawer.
 export default function MobileBar() {

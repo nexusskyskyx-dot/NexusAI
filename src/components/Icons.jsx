@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 // NexusAI · Inline SVG icon set (stroke = currentColor)
 const I = ({ d, size = 18, sw = 2, fill = 'none', children }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -87,4 +88,24 @@ export function Logo({ size = 28 }) {
       <path d="M11 22V10l10 12V10" stroke="url(#nxg)" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+
+// v1.21 · BrandLogo — uses the owner's real logo when present
+// (public/logo.png or public/logo.jpg), falling back to the vector hexagon.
+export function BrandLogo({ size = 28 }) {
+  const [step, setStep] = useState(0);
+  const tries = ['/logo.png', '/logo.jpg'];
+  if (step < tries.length) {
+    return (
+      <img
+        src={tries[step]}
+        alt="NexusAI"
+        className="brandlogo-img"
+        style={{ width: size, height: size }}
+        onError={() => setStep((s) => s + 1)}
+      />
+    );
+  }
+  return <Logo size={size} />;
 }

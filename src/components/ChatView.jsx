@@ -3,7 +3,7 @@ import { useStore, actions } from '../store.js';
 import Message from './Message.jsx';
 import Composer from './Composer.jsx';
 import AgentsPanel from './AgentsPanel.jsx';
-import { Logo, IconSparkle, IconCode, IconBrain, IconBolt, IconImage, IconRocket } from './Icons.jsx';
+import { BrandLogo, IconSparkle, IconCode, IconBrain, IconBolt, IconImage, IconRocket } from './Icons.jsx';
 
 const SUGGESTIONS = [
   {
@@ -52,7 +52,7 @@ function Hero() {
   return (
     <div className="hero">
       <div className="hero-logo">
-        <Logo size={58} />
+        <BrandLogo size={64} />
       </div>
       <h1 className="hero-title">
         NEXUS<span>AI</span>

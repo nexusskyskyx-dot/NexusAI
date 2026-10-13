@@ -85,7 +85,7 @@ export const storage = {
   saveKeys: (v) => save(K.keys, v),
   loadSettings: () => {
     const s = load(K.settings, {
-      accent: 'platinum',
+      accent: 'blue',
       mode: 'team', // sticky pick when autoIntent is off
       autoIntent: true, // 🧭 route messages by detected intent
       transport: 'auto', // 'auto' | 'direct' | 'proxy'
@@ -97,11 +97,16 @@ export const storage = {
       stagger: true,
       sidebarCollapsed: false,
     });
-    // v1.7 one-time migration: the old default (green) becomes platinum;
-    // deliberately picked colors are kept, and the flag prevents re-migration.
+    // v1.7 one-time migration: the old default (green) becomes platinum.
+    // v1.21 one-time migration: the default theme becomes saturated blue
+    // (platinum users are moved; deliberately picked colors are kept).
     if (!s.accMigrated) {
       if (s.accent === 'green') s.accent = 'platinum';
       s.accMigrated = true;
+    }
+    if (!s.accMigrated2) {
+      if (s.accent === 'platinum') s.accent = 'blue';
+      s.accMigrated2 = true;
     }
     return s;
   },

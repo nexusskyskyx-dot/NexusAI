@@ -426,7 +426,7 @@ await up11;
 sweep11('projects · upgraded (v2)');
 
 // every remaining view
-for (const v of ['agents', 'canvas', 'keys']) {
+for (const v of ['agents', 'keys']) {
   A11.setView(v);
   sweep11(`${v} view`);
 }
@@ -1163,6 +1163,48 @@ function modelLabelSafeguard(p, m) {
   globalThis.fetch = realFetch25;
   if (!/404/.test(e25b) || !/gemini-3/.test(e25b)) throw new Error('all-retired error unclear: ' + e25b);
   console.log('[25] gemini self-heal — retired model 404 → lite ✓ honest ✓ · 401 fails fast ✓ · all-retired names the models ✓ · registry on live IDs ✓');
+}
+
+// 26 · v1.21 redesign — OLED black + saturated blue, Inter bold, no canvas, brand logo
+{
+  const css26 = (await import('node:fs')).readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const idx26 = (await import('node:fs')).readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const st26 = (await import('../src/lib/storage.js')).storage.loadSettings();
+
+  // theme: saturated blue accent, deep OLED surfaces
+  if (!/--acc: #2f6bff/.test(css26) || !/--acc-ink: #ffffff/.test(css26)) throw new Error('saturated blue accent missing');
+  if (!/--bg: #000000/.test(css26) || !/--bg1: #08090e/.test(css26)) throw new Error('OLED black surfaces missing');
+  if (!/[data-acc='blue']/.test(css26)) throw new Error('blue accent preset missing');
+  // default + migration
+  if (st26.accent !== 'blue') throw new Error('default accent is not blue: ' + st26.accent);
+  if (!idx26.includes('data-acc="blue"')) throw new Error('html data-acc not blue');
+  // Inter bold typography
+  if (idx26.includes('Space+Grotesk') || idx26.includes('Space Grotesk')) throw new Error('Space Grotesk still loaded');
+  if (!/Inter:wght@400;500;600;700;800;900/.test(idx26)) throw new Error('Inter weights not loaded');
+  if (!/--font-d: 'Inter'/.test(css26)) throw new Error('display font is not Inter');
+  if (!/body \{ font-weight: 500/.test(css26) && !/font-weight: 500/.test(css26)) throw new Error('base weight missing');
+
+  // canvas removed everywhere
+  const fs26 = await import('node:fs');
+  if (fs26.existsSync(new URL('../src/components/CanvasView.jsx', import.meta.url))) throw new Error('CanvasView.jsx still exists');
+  const appSrc26 = fs26.readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  if (/canvas/i.test(appSrc26)) throw new Error('App still references canvas');
+  const sbSrc26 = fs26.readFileSync(new URL('../src/components/Sidebar.jsx', import.meta.url), 'utf8');
+  const mbSrc26 = fs26.readFileSync(new URL('../src/components/MobileBar.jsx', import.meta.url), 'utf8');
+  if (/label="Canvas"/.test(sbSrc26) || /canvas/.test(mbSrc26)) throw new Error('canvas nav still present');
+  if (/\bcanvasview\b|\bcanvas-body\b|\bcanvas-editor\b/.test(css26)) throw new Error('canvas styles remain');
+
+  // brand logo: custom-image override with vector fallback
+  const icSrc26 = fs26.readFileSync(new URL('../src/components/Icons.jsx', import.meta.url), 'utf8');
+  if (!icSrc26.includes('BrandLogo') || !icSrc26.includes('/logo.png') || !icSrc26.includes('onError')) throw new Error('BrandLogo override missing');
+  if (!sbSrc26.includes('BrandLogo')) throw new Error('sidebar does not use BrandLogo');
+  // live render: sidebar brand + hero render with the override img attempt
+  A11.setView('chat');
+  A11.newConversation();
+  const html26 = renderToString(React11.createElement(App));
+  if (!html26.includes('brandlogo-img')) throw new Error('brand logo not rendered');
+  if (html26.includes('>Canvas<')) throw new Error('canvas label visible in render');
+  console.log('[26] redesign — blue accent + OLED surfaces ✓ · Inter bold (900) ✓ · default+migration ✓ · canvas fully removed ✓ · BrandLogo override ✓');
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');

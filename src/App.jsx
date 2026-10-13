@@ -3,7 +3,6 @@ import { useStore, actions } from './store.js';
 import Sidebar from '@components/Sidebar.jsx';
 import ChatView from '@components/ChatView.jsx';
 import AgentsView from '@components/AgentsView.jsx';
-import CanvasView from '@components/CanvasView.jsx';
 import KeysView from '@components/KeysView.jsx';
 import ProjectsView from '@components/ProjectsView.jsx';
 import PreviewModal from '@components/PreviewModal.jsx';
@@ -58,7 +57,6 @@ export default function App() {
       <main className="main">
         {s.view === 'chat' && <ChatView />}
         {s.view === 'agents' && <AgentsView />}
-        {s.view === 'canvas' && <CanvasView />}
         {s.view === 'projects' && <ProjectsView />}
         {s.view === 'keys' && <KeysView />}
       </main>

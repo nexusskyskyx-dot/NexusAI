@@ -1,8 +1,9 @@
 import React from 'react';
 import { useStore, actions } from '../store.js';
-import { Logo, IconChat, IconAgents, IconCode, IconKeys, IconPlus, IconTrash, IconBolt, IconX, IconFolder } from './Icons.jsx';
+import { BrandLogo, IconChat, IconAgents, IconCode, IconKeys, IconPlus, IconTrash, IconBolt, IconX, IconFolder } from './Icons.jsx';
 
 const ACCENTS = [
+  { id: 'blue', c: '#2f6bff' },
   { id: 'platinum', c: '#dcdde2' },
   { id: 'green', c: '#00d492' },
   { id: 'cyan', c: '#4da3ff' },
@@ -41,7 +42,7 @@ export default function Sidebar() {
       {open && <div className="backdrop" onClick={close} />}
       <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${open ? 'open' : ''}`}>
         <div className="brand">
-          <Logo size={28} />
+          <BrandLogo size={30} />
           {!collapsed && (
             <div className="brand-text">
               <div className="brand-name">
@@ -70,7 +71,6 @@ export default function Sidebar() {
           <NavItem icon={<IconChat />} label="Chat" view="chat" />
           <NavItem icon={<IconAgents />} label="Agents" view="agents" />
           <NavItem icon={<IconFolder />} label="Projects" view="projects" badge={s.projects.length || null} />
-          <NavItem icon={<IconCode />} label="Canvas" view="canvas" />
           <NavItem icon={<IconKeys />} label="Keys & Models" view="keys" badge={keyCount ? keyCount : 'FREE'} />
         </nav>
 
