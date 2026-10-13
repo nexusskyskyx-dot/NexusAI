@@ -58,6 +58,47 @@ function WorkLog({ msg }) {
   );
 }
 
+// ── image team phases (v1.16): same quiet-worklog pattern as the chat team ──
+const IMG_DONE = { research: 'Searched', enhance: 'Enhanced', generate: 'Painted', upscale: 'Sharpened', check: 'Verified' };
+const IMG_NOW = { research: 'Searching references', enhance: 'Enhancing the prompt', generate: 'Painting', upscale: 'Upscaling & sharpening', check: 'Checking the result' };
+const IMG_SUB = { research: 'what the subject really looks like', enhance: 'rewriting for max quality', generate: 'image tools at work', upscale: 'unsharp mask pass', check: 'pass / fail gate' };
+
+function ImageLog({ msg }) {
+  if (msg.kind !== 'image' || !msg.istages?.length) return null;
+  if (msg.streaming) {
+    const runs = msg.istages.filter((x) => x.status === 'run');
+    const active = runs[runs.length - 1];
+    if (!active) return null;
+    const done = new Set();
+    for (const x of msg.istages) {
+      if (x.status === 'done' || x.status === 'fail' || x.status === 'skip') done.add(x.stage);
+      if (x.status === 'run') done.delete(x.stage);
+    }
+    const order = ['research', 'enhance', 'generate', 'upscale', 'check'];
+    const prev = order.filter((st) => done.has(st) && st !== active.stage);
+    return (
+      <div className="worklog">
+        {prev.map((st) => (
+          <div key={st} className="wstep done">✓ {IMG_DONE[st]}</div>
+        ))}
+        <div className="wstep active">
+          <span className="wstep-title"><span className="led" /> {IMG_NOW[active.stage]}…</span>
+          <span className="wstep-sub">{active.detail || IMG_SUB[active.stage]}</span>
+        </div>
+      </div>
+    );
+  }
+  const done = [...new Set(msg.istages.filter((x) => x.status === 'done').map((x) => x.stage))];
+  if (!done.length) return null;
+  return (
+    <div className="worksum static" title="Image Team pipeline">
+      <IconAgents size={12} />
+      {done.map((st) => `✓ ${IMG_DONE[st]}`).join(' · ')}
+      {msg.ms ? <span className="worksum-ms">{(msg.ms / 1000).toFixed(1)}s</span> : null}
+    </div>
+  );
+}
+
 // Attach interactive toolbars to rendered <pre><code> blocks
 function enhanceCodeBlocks(root) {
   if (!root) return;
@@ -241,7 +282,9 @@ export default function Message({ msg, isLast }) {
       ) : null}
 
       {msg.kind === 'image' ? (
-        msg.images?.length ? (
+        <>
+          <ImageLog msg={msg} />
+          {msg.images?.length ? (
           <div className={`img-grid n${Math.min(msg.images.length, 4)}`}>
             {msg.images.map((im, i) =>
               im.src ? (
@@ -249,6 +292,8 @@ export default function Message({ msg, isLast }) {
                   <img src={im.src} alt={im.prompt || 'generated image'} loading="lazy" />
                   <span className="img-cap">
                     {im.model} · {im.w}×{im.h}
+                    {im.upscaled ? ' · sharpened' : ''}
+                    {im.check === 'pass' ? ' ✓' : im.check === 'fail' ? ' ⚠' : ''}
                   </span>
                 </button>
               ) : (
@@ -262,11 +307,15 @@ export default function Message({ msg, isLast }) {
           <div className="msg-ai-wait">
             <span className="shimmer" />
             <span className="wait-label">
-              Painting your image<span className="wait-dots">…</span>
+              {msg.istages?.length ? 'Image Team at work' : 'Painting your image'}<span className="wait-dots">…</span>
             </span>
-            <span className="wait-sub">{msg.model}</span>
+            <span className="wait-sub">{msg.istages?.length ? 'Websearcher · Enhancer · Image Tools · Upscaler · Previewer' : msg.model}</span>
           </div>
-        )
+        )}
+          {msg.images?.length && !msg.streaming && msg.enhancedPrompt ? (
+            <div className="img-enhanced" title={msg.enhancedPrompt}>✨ {msg.enhancedPrompt}</div>
+          ) : null}
+        </>
       ) : empty && !(msg.mode === 'team' && msg.stages?.length) ? (
         <div className="msg-ai-wait">
           <span className="shimmer" />

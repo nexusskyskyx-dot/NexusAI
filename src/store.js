@@ -4,7 +4,8 @@
 import { useSyncExternalStore } from 'react';
 import { storage, uid } from '@lib/storage.js';
 import { streamChat, friendlyError } from '@lib/ai.js';
-import { generateImage, IMAGE_ASPECTS } from '@lib/images.js';
+import { IMAGE_ASPECTS } from '@lib/images.js';
+import { runImagePipeline } from '@lib/imagepipe.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
 import { searchWeb, researchQuery } from '@lib/websearch.js';
 import { runProject, upgradeProject as runUpgrade } from '@lib/projects.js';
@@ -329,32 +330,38 @@ async function generate(convId, history) {
 
   try {
     if (mode === 'image') {
+      // 🎨 v1.16 Image Team — Websearcher → Enhancer → Image Tools → Upscaler → Previewer
       const cfg = state.image || {};
       const aspect = IMAGE_ASPECTS.find((x) => x.id === cfg.aspect) || IMAGE_ASPECTS[0];
       const count = Math.max(1, Math.min(4, cfg.count || 1));
       const prompt = history[history.length - 1]?.content || '';
-      const images = [];
-      let lastErr = null;
-      for (let i = 0; i < count; i++) {
-        try {
-          const img = await generateImage({
-            provider: cfg.provider || 'pollinations',
-            model: cfg.model || 'flux',
-            prompt,
-            aspect: aspect.id,
-            apiKey: keys[cfg.provider === 'openai-images' ? 'openai' : cfg.provider],
-            signal,
-          });
-          images.push(img);
-          queueStreamPatch(convId, msg.id, { images: [...images] });
-        } catch (e) {
-          if (e.name === 'AbortError') throw e;
-          lastErr = e;
-          if (!images.length) throw e;
-          break;
-        }
+      const istages = [];
+      const out = await runImagePipeline({
+        prompt,
+        provider: cfg.provider || 'pollinations',
+        model: cfg.model || 'flux',
+        aspect: aspect.id,
+        aspectW: aspect.w,
+        aspectH: aspect.h,
+        count,
+        apiKey: keys[cfg.provider === 'openai-images' ? 'openai' : cfg.provider],
+        signal,
+        web: settings.web !== false,
+        onStage: (stage, status, detail) => {
+          istages.push({ stage, status, detail });
+          queueStreamPatch(convId, msg.id, { istages: [...istages] });
+        },
+      });
+      if (!out.images.length && out.warns.length) {
+        finish({ images: [], istages, enhancedPrompt: out.enhancedPrompt, error: `Image Team failed: ${out.warns[0]}` });
+      } else {
+        finish({
+          images: out.images,
+          istages,
+          enhancedPrompt: out.enhancedPrompt,
+          error: out.warns.length ? `Note: ${out.warns.join(' · ')}` : undefined,
+        });
       }
-      finish({ images, error: lastErr ? `Some images failed: ${friendlyError(lastErr)}` : undefined });
     } else if (mode === 'solo') {
       let text = '';
       let reasoning = '';

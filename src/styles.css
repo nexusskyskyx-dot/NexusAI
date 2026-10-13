@@ -964,6 +964,14 @@ input[type='range'] { accent-color: var(--acc); width: 170px; }
 .aspect-btn.on { background: var(--acc); color: var(--acc-ink); }
 
 /* image grid in messages */
+.img-enhanced {
+  margin-top: 8px; font-size: 11.5px; line-height: 1.5; color: var(--txt3);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  border-left: 2px solid var(--acc-soft); padding-left: 10px;
+}
+.worksum.static { cursor: default; }
+.worksum.static:hover { border-color: var(--line2); color: var(--txt3); }
+
 .img-grid { display: grid; gap: 10px; margin: 4px 0; }
 .img-grid.n1 { grid-template-columns: 1fr; max-width: 560px; }
 .img-grid.n2 { grid-template-columns: 1fr 1fr; max-width: 640px; }

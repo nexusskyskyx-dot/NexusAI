@@ -664,4 +664,53 @@ console.log(`[15] open air — input-first composer ✓ · slim scrollable strip
   console.log(`[16] openrouter models — curated ${or16.models.length} (${or16.models.filter((m) => m.tags.includes('FREE')).length} free) ✓ · live merge: +LIVE free only, no dupes/paid/embed ✓ · labels cleaned ✓`);
 }
 
+// 17 · Image Team — 5-stage pipeline + quiet worklog UI
+{
+  const { runImagePipeline } = await import('../src/lib/imagepipe.js');
+  const checks17 = [];
+  const stagesSeen17 = [];
+  const out17 = await runImagePipeline({
+    prompt: 'a dragon over a city',
+    count: 2, aspect: '1:1', aspectW: 1024, aspectH: 1024, web: true,
+    search: async () => 'dragons: scaled wings, ember glow',
+    complete: async () => 'a colossal ember dragon circling a neon city at dusk, volumetric light, 85mm lens, ultra detailed',
+    generate: async ({ i, retry }) => ({ src: 'blob:x' + i + (retry ? 'r' : ''), w: 1024, h: 1024, seed: i + (retry ? 10 : 0), model: 'flux', provider: 'pollinations', prompt: 'p', remote: false }),
+    upscale: async (im) => ({ ...im, src: 'blob:sharp' + im.seed, upscaled: true }),
+    check: async (im) => { checks17.push(im.seed); return im.seed === 0 ? { pass: false, why: 'blank frame' } : { pass: true }; },
+    onStage: (st, status) => stagesSeen17.push(st + ':' + status),
+  });
+  if (out17.images.length !== 2 || !out17.images.every((i) => i.check === 'pass')) throw new Error('images bad');
+  if (JSON.stringify(checks17) !== '[0,10,1]') throw new Error('retry flow wrong: ' + JSON.stringify(checks17));
+  if (out17.enhancedBy !== 'model' || !/dragon/i.test(out17.enhancedPrompt)) throw new Error('enhancer bad');
+  const seq17 = out17.stages.map((x) => x.stage);
+  if (seq17.indexOf('research') > seq17.indexOf('enhance') || seq17.indexOf('enhance') > seq17.indexOf('generate')) throw new Error('stage order wrong');
+  if (!stagesSeen17.includes('check:retry')) throw new Error('retry stage not reported');
+
+  // deterministic fallback + all-fail warn
+  const out17b = await runImagePipeline({ prompt: 'a cat', count: 1, web: false, complete: async () => { throw new Error('down'); }, generate: async () => ({ src: 'blob:c', w: 1024, h: 1024, remote: false }), upscale: async (im) => ({ ...im, upscaled: false }), check: async () => ({ pass: true }) });
+  if (out17b.enhancedBy !== 'deterministic' || !/cat/.test(out17b.enhancedPrompt)) throw new Error('fallback enhancer failed');
+  const out17c = await runImagePipeline({ prompt: 'x', count: 1, web: false, complete: async () => 'short', generate: async () => { throw new Error('provider down'); }, check: async () => ({ pass: true }) });
+  if (out17c.images.length !== 0 || out17c.warns.length !== 1) throw new Error('all-fail path wrong');
+
+  // UI: render an image message mid-run + finished with the worklog pattern
+  const Message17 = (await import('../src/components/Message.jsx')).default;
+  const msgRun17 = { id: 'm17', role: 'assistant', kind: 'image', mode: 'image', streaming: true, images: [], istages: [
+    { stage: 'research', status: 'done' }, { stage: 'enhance', status: 'done' }, { stage: 'generate', status: 'run', detail: 'image 1/1' },
+  ] };
+  const htmlRun17 = renderToString(React11.createElement(Message17, { msg: msgRun17, isLast: true }));
+  if (!/Enhancing|Painting|Searching/.test(htmlRun17)) throw new Error('image worklog phases missing mid-run');
+  if (!/Image Team at work|Websearcher/.test(htmlRun17)) throw new Error('image team wait copy missing');
+  const msgDone17 = { id: 'm17d', role: 'assistant', kind: 'image', mode: 'image', streaming: false, ms: 24000, images: [
+    { src: 'blob:z', w: 1024, h: 1024, model: 'flux', check: 'pass', upscaled: true },
+  ], istages: [
+    { stage: 'research', status: 'done' }, { stage: 'enhance', status: 'done' }, { stage: 'generate', status: 'done' },
+    { stage: 'upscale', status: 'done' }, { stage: 'check', status: 'done' },
+  ], enhancedPrompt: 'a colossal ember dragon, volumetric light, 85mm, ultra detailed' };
+  const htmlDone17 = renderToString(React11.createElement(Message17, { msg: msgDone17, isLast: false }));
+  for (const piece of ['✓ Searched', '✓ Enhanced', '✓ Painted', '✓ Sharpened', '✓ Verified', 'sharpened', 'ember dragon']) {
+    if (!htmlDone17.includes(piece)) throw new Error('finished image message missing: ' + piece);
+  }
+  console.log(`[17] image team — research→enhance→generate→upscale→check ✓ · retry-on-fail ✓ (${checks17.join(',')}) · deterministic fallback ✓ · all-fail warns ✓ · worklog UI ✓`);
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');
