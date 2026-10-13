@@ -86,7 +86,8 @@ export const storage = {
   loadSettings: () => {
     const s = load(K.settings, {
       accent: 'platinum',
-      mode: 'team', // 'solo' | 'team' | 'image'
+      mode: 'team', // sticky pick when autoIntent is off
+      autoIntent: true, // 🧭 route messages by detected intent
       transport: 'auto', // 'auto' | 'direct' | 'proxy'
       web: true, // 🌐 Researcher: search the web before answering
       temperature: 0.7,

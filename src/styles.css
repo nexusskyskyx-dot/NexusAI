@@ -450,12 +450,56 @@ a:hover { text-decoration: underline; }
   padding: 10px 18px calc(12px + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(to top, var(--bg) 70%, transparent);
 }
-.composer {
+.composer { position: relative;
   max-width: 780px; margin: 0 auto; background: var(--bg1);
   border: 1px solid var(--line2); border-radius: 18px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .composer:focus-within { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc), 0 0 30px var(--acc-dim); }
+/* v1.18 intent chip + more menu */
+.intent-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 999px;
+  color: var(--txt2); font-family: var(--font-d); font-size: 11.5px; font-weight: 700;
+  padding: 6px 12px; min-height: 30px; transition: all 0.15s;
+}
+.intent-chip:hover { border-color: var(--acc); color: var(--txt); }
+.intent-chip.live { color: var(--acc); border-color: var(--acc-soft); background: var(--acc-dim); }
+.intent-led { width: 6px; height: 6px; border-radius: 50%; background: var(--txt3); flex-shrink: 0; }
+.intent-chip.live .intent-led { background: var(--acc); box-shadow: 0 0 7px var(--acc-glow); animation: pulse 2.4s infinite; }
+.moremenu {
+  position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 360; width: 340px; max-width: 86vw;
+  background: var(--bg1); border: 1px solid var(--line2); border-radius: var(--r);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9); padding: 8px;
+  animation: fadeUp 0.18s ease;
+}
+.mm-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border-radius: var(--rs); }
+.mm-row + .mm-row { border-top: 1px solid var(--line); }
+.mm-label { font-size: 11.5px; font-weight: 700; color: var(--txt2); font-family: var(--font-d); white-space: nowrap; }
+.seg { display: inline-flex; background: var(--bg2); border: 1px solid var(--line); border-radius: 999px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+.seg button {
+  background: none; border: 0; color: var(--txt3); font-family: var(--font-d);
+  font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+}
+.seg button.on { background: var(--acc); color: var(--acc-ink); }
+.seg-toggle {
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 999px; color: var(--txt3);
+  font-family: var(--font-d); font-size: 11px; font-weight: 700; padding: 5px 14px; cursor: pointer;
+}
+.seg-toggle.on { color: var(--acc); border-color: var(--acc-soft); background: var(--acc-dim); }
+.mm-select {
+  background: var(--bg2); color: var(--txt); border: 1px solid var(--line2); border-radius: 8px;
+  font-family: var(--font-d); font-size: 12px; font-weight: 600; padding: 7px 9px; max-width: 190px;
+}
+.mm-select:focus { outline: none; border-color: var(--acc); }
+.mm-links { flex-wrap: wrap; gap: 6px; justify-content: flex-start; }
+.mm-link {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--bg2); border: 1px solid var(--line);
+  color: var(--txt2); border-radius: 999px; font-family: var(--font-d); font-size: 11px; font-weight: 600;
+  padding: 6px 12px; cursor: pointer; transition: all 0.15s;
+}
+.mm-link:hover { border-color: var(--acc); color: var(--txt); }
+
 .composer-bar { display: flex; align-items: center; gap: 8px; padding: 0 10px 10px; flex-wrap: wrap; }
 .mode-switch { display: inline-flex; background: var(--bg2); border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
 .mode-btn {
@@ -873,6 +917,9 @@ input[type='range'] { accent-color: var(--acc); width: 170px; }
   .model-chip { max-width: 46vw; font-size: 10.5px; padding: 6px 11px; }
   .composer-tools { display: inline-flex; gap: 2px; }
   .composer-note { display: none; }
+
+  /* more menu → bottom sheet */
+  .moremenu { position: fixed; left: 0; right: 0; bottom: 0; width: 100%; max-width: 100%; border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
 
   /* model picker → bottom sheet */
   .mpop-body {

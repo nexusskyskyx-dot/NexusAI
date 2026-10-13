@@ -591,18 +591,17 @@ console.log(`[14] easy keys — detect ✓ (.env/multi/ambiguous/exotic) · back
   const html15 = renderToString(React11.createElement(App));
   // input FIRST, controls below — the textarea must appear before the mode switch
   const taAt = html15.indexOf('<textarea');
-  const soloAt = html15.indexOf('mode-switch');
+  const soloAt = html15.indexOf('intent-chip');
   if (taAt < 0 || soloAt < 0) throw new Error('composer pieces missing from render');
   if (taAt > soloAt) throw new Error('composer is not input-first anymore');
-  // all controls still present in the slim strip
-  for (const piece of ['composer-bar', 'Team', 'Image', '🌐 Web', 'composer-tools', 'Enter ↵ send']) {
+  // v1.18 · the strip is ONE intent chip + the auto-routing hint — no mode wall
+  for (const piece of ['composer-bar', 'intent-chip', '🧭 Auto', 'auto-routing on']) {
     if (!html15.includes(piece)) throw new Error(`composer strip missing: ${piece}`);
   }
-  // image mode extras render in their own strip (not crowding the main bar)
-  A11.setSettings({ mode: 'image' });
-  const img15 = renderToString(React11.createElement(App));
-  if (!img15.includes('composer-xtra')) throw new Error('image controls strip missing');
-  if (!/aspect-btn/.test(img15)) throw new Error('aspect buttons missing');
+  const strip15 = html15.slice(Math.max(0, html15.indexOf('composer-wrap')));
+  for (const gone of ['mode-switch', '>Solo<', '>Team<', '>Image<', '🌐 Web', 'composer-tools', 'aspect-btn']) {
+    if (strip15.includes(gone)) throw new Error(`crowded control still visible: ${gone}`);
+  }
   A11.setSettings({ mode: 'team' });
 
   // CSS: mobile rules that make the density real
@@ -615,7 +614,7 @@ console.log(`[14] easy keys — detect ✓ (.env/multi/ambiguous/exotic) · back
   if (!/scrollbar-width:\s*thin/.test(css15)) throw new Error('slim scrollbars missing');
   if (!/\.composer-bar\s*{[^}]*padding:\s*0 10px 10px/.test(css15)) throw new Error('desktop bar padding wrong');
 }
-console.log(`[15] open air — input-first composer ✓ · slim scrollable strip ✓ · image extras separated ✓ · sources strip ✓ · mobile density rules ✓`);
+console.log(`[15] open air — input-first composer ✓ · one intent chip, zero mode wall ✓ · sources strip ✓ · mobile density rules ✓`);
 
 // 16 · OpenRouter top models — bigger curated catalog + live free-tier merge
 {
@@ -866,6 +865,53 @@ console.log(`[15] open air — input-first composer ✓ · slim scrollable strip
   if (!probe19.includes('groq')) throw new Error('setKeys did not auto-configure solo — got ' + probe19);
   A11.removeKey('groq');
   console.log(`[19] auto-best + forced calls — ranking/upgrades ✓ · deliberate picks kept ✓ · dead remap ✓ · image best (DALL·E⇄Flux) ✓ · chat cascade credited ✓ · partial kept ✓ · image memory ✓ · forced image fallback ✓ · setKeys auto-configures ✓`);
+}
+
+// 20 · auto-intent — the message decides where it goes
+{
+  const { detectIntent } = await import('../src/lib/intent.js');
+  // the four user examples, verbatim
+  if (detectIntent('Make a Car with neon light image').mode !== 'image') throw new Error('example 1 wrong');
+  if (detectIntent('Search about cars with neon lights').mode !== 'search') throw new Error('example 2 wrong');
+  if (detectIntent('Hello how are you').mode !== 'chat') throw new Error('example 3 wrong');
+  if (detectIntent('Make a Tesla store project').mode !== 'project') throw new Error('example 4 wrong');
+  // matrix
+  const matrix20 = [
+    ['draw a dragon', 'image'], ['generate a picture of a sunset', 'image'], ['a logo for my startup', 'image'],
+    ['build me a snake game', 'project'], ['build me a website for my bakery', 'project'], ['create a dashboard app', 'project'],
+    ['what is the capital of france', 'search'], ['look up the latest ai news', 'search'], ['research quantum computing', 'search'],
+    ['write a python script that renames files', 'chat'], ['explain how transformers work', 'chat'], ['', 'chat'],
+  ];
+  for (const [t, want] of matrix20) {
+    if (detectIntent(t).mode !== want) throw new Error(`intent wrong for ${JSON.stringify(t)} → ${detectIntent(t).mode}, want ${want}`);
+  }
+  if (!detectIntent('Hello how are you').smalltalk) throw new Error('smalltalk not detected');
+  if (detectIntent('hey make me a game').smalltalk) throw new Error('smalltalk false positive');
+  if (detectIntent('hey make me a game').mode !== 'project') throw new Error('greeting prefix broke project detection');
+
+  // store routing: project text leaves chat and starts a project run
+  A11.setView('chat');
+  A11.newConversation();
+  A11.setSettings({ mode: 'team', autoIntent: true });
+  A11.sendMessage('make a neon arcade game project');
+  let routed20 = false;
+  for (let i = 0; i < 30 && !routed20; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    routed20 = renderToString(React11.createElement(() => String(useStore11().view))) === 'projects';
+  }
+  if (!routed20) throw new Error('project-intent message did not route to Projects view');
+  // wait for that run to finish so later tests see a clean state
+  for (let i = 0; i < 180; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (renderToString(React11.createElement(() => (useStore11().streaming || useStore11().projectBusy ? 'BUSY' : 'DONE'))) === 'DONE') break;
+  }
+  // manual override wins: autoIntent off keeps the picked mode
+  A11.setSettings({ autoIntent: false, mode: 'solo' });
+  A11.setView('chat');
+  const html20 = renderToString(React11.createElement(App));
+  if (!html20.includes('⚡ Solo')) throw new Error('manual override chip not shown');
+  A11.setSettings({ autoIntent: true, mode: 'team' });
+  console.log('[20] auto-intent — 4/4 examples ✓ · 12-case matrix ✓ · smalltalk lane ✓ · project routing live ✓ · manual override ✓');
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');

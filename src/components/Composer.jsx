@@ -1,83 +1,24 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { useStore, actions } from '../store.js';
-import ModelPicker from './ModelPicker.jsx';
-import { IMAGE_PROVIDERS } from '@shared/providers.js';
+import { useStore, actions, hasCredential } from '../store.js';
+import { PROVIDERS, IMAGE_PROVIDERS } from '@shared/providers.js';
 import { IMAGE_ASPECTS } from '@lib/images.js';
-import { IconSend, IconStop, IconAgents, IconBolt, IconImage, IconChevron, IconDownload } from './Icons.jsx';
-
-function ImageModelPicker({ value, onChange }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
-
-  const prov = IMAGE_PROVIDERS.find((p) => p.id === value.provider) || IMAGE_PROVIDERS[0];
-  const model = prov.models.find((m) => m.id === value.model) || prov.models[0];
-
-  return (
-    <div className="mpop" ref={ref}>
-      <button className="model-chip" onClick={() => setOpen((o) => !o)} title="Pick image model">
-        <IconImage size={13} />
-        <span className="model-chip-model">{model?.label || value.model}</span>
-        <IconChevron size={13} />
-      </button>
-      {open && (
-        <div className="mpop-body">
-          <div className="mp">
-            <div className="mp-list">
-              {IMAGE_PROVIDERS.map((p) => (
-                <div key={p.id} className="mp-group">
-                  <div className="mp-provider">
-                    {p.name}
-                    {!p.needsKey && <span className="tag tag-free">No key</span>}
-                    {p.needsKey && <span className="tag tag-paid">OpenAI key</span>}
-                  </div>
-                  {p.models.map((m) => {
-                    const sel = value.provider === p.id && value.model === m.id;
-                    return (
-                      <button
-                        key={p.id + m.id}
-                        className={`mp-model ${sel ? 'sel' : ''}`}
-                        onClick={() => {
-                          onChange({ provider: p.id, model: m.id });
-                          setOpen(false);
-                        }}
-                      >
-                        <span className="mp-model-label">
-                          {m.label}
-                          <span className="mp-model-id">{m.id}</span>
-                        </span>
-                        <span className="mp-tags">
-                          {(m.tags || []).map((t) => (
-                            <span key={t} className={`tag ${t === 'FREE' ? 'tag-free' : 'tag-paid'}`}>
-                              {t}
-                            </span>
-                          ))}
-                        </span>
-                        {sel && <span className="mp-check">●</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+import { IconSend, IconStop, IconAgents, IconBolt, IconImage, IconChevron, IconDownload, IconSettings } from './Icons.jsx';
+import { detectIntent, INTENT_LABEL } from '@lib/intent.js';
 
 export default function Composer() {
   const s = useStore();
   const [text, setText] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
   const taRef = useRef(null);
+  const menuRef = useRef(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const h = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [menuOpen]);
 
   useEffect(() => {
     const ta = taRef.current;
@@ -93,25 +34,48 @@ export default function Composer() {
   };
 
   const mode = s.settings.mode || 'team';
+  const auto = s.settings.autoIntent !== false;
   const img = s.image;
   const activeConv = s.conversations.find((x) => x.id === s.activeId);
   const convHasMsgs = !!activeConv?.messages?.length;
   const convHasTeam = !!activeConv?.messages?.some((m) => m.mode === 'team');
+
+  // 🧭 live verdict — what the user typed decides where it goes
+  const intent = text.trim() && auto ? detectIntent(text) : null;
+  const chipLabel = !auto
+    ? INTENT_LABEL[mode] || '⬡ Team'
+    : intent
+    ? INTENT_LABEL[intent.mode]
+    : '🧭 Auto';
+
+  const exportChat = () => {
+    const conv = s.conversations.find((x) => x.id === s.activeId);
+    if (!conv) return;
+    const lines = [`# ${conv.title}`, ''];
+    for (const m of conv.messages) {
+      lines.push(m.role === 'user' ? `## 🧑 You` : `## ⬡ Assistant${m.model ? ` · ${m.model}` : ''}`);
+      lines.push(m.content || '(no text)');
+      if (m.images?.length) lines.push(`> ${m.images.length} image(s) attached`);
+      lines.push('');
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'nexusai-chat.md';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    actions.toast('Chat exported as Markdown ✓');
+  };
+
   return (
     <div className="composer-wrap">
       <div className="composer">
-        {/* v1.15 · input first — controls live in one slim strip below */}
+        {/* v1.18 · input first — ONE intent chip + ONE menu, nothing else */}
         <div className="composer-main">
           <textarea
             ref={taRef}
             value={text}
-            placeholder={
-              mode === 'team'
-                ? 'Brief the team — the agents will collaborate on the best answer…'
-                : mode === 'image'
-                ? 'Describe the image to generate — e.g. “a neon city at night, cinematic, ultra detailed”…'
-                : 'Ask NexusAI anything…'
-            }
+            placeholder={auto ? 'Type anything — NexusAI routes it (image · project · research · chat)…' : `Ask NexusAI anything (${mode} mode)…`}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -127,108 +91,130 @@ export default function Composer() {
             </button>
           ) : (
             <button className="btn-send" onClick={send} disabled={!text.trim()} title="Send" aria-label="Send">
-              {mode === 'image' ? <IconImage size={17} /> : <IconSend size={17} />}
+              {(auto ? intent?.mode === 'image' : mode === 'image') ? <IconImage size={17} /> : <IconSend size={17} />}
             </button>
           )}
         </div>
 
         <div className="composer-bar">
-          <div className="mode-switch" role="tablist">
-            <button className={`mode-btn ${mode === 'solo' ? 'on' : ''}`} onClick={() => actions.setSettings({ mode: 'solo' })} title="One model answers directly">
-              <IconBolt size={13} /> Solo
-            </button>
-            <button className={`mode-btn ${mode === 'team' ? 'on' : ''}`} onClick={() => actions.setSettings({ mode: 'team' })} title="Planner → Drafters → Reviewer → Synthesizer">
-              <IconAgents size={13} /> Team
-            </button>
-            <button className={`mode-btn ${mode === 'image' ? 'on' : ''}`} onClick={() => actions.setSettings({ mode: 'image' })} title="Generate images">
-              <IconImage size={13} /> Image
-            </button>
-          </div>
-
           <button
-            className={`mode-btn web-toggle ${s.settings.web !== false ? 'on' : ''}`}
-            onClick={() => actions.setSettings({ web: s.settings.web === false })}
-            title="Researcher agent — searches the web (Wikipedia, DuckDuckGo, GitHub) and feeds the knowledge to every agent before they answer"
+            className={`intent-chip ${intent ? 'live' : ''}`}
+            onClick={() => setMenuOpen(true)}
+            title={auto ? 'Auto-detected destination — click to change' : 'Manual mode — click to change'}
           >
-            🌐 Web
+            <span className="intent-led" />
+            {chipLabel}
+            <IconChevron size={12} />
           </button>
 
-          {mode === 'solo' ? (
-            <ModelPicker value={s.solo} onChange={(v) => actions.setSolo(v)} />
-          ) : mode === 'team' ? (
-            <button className="model-chip team-chip" onClick={() => actions.setView('agents')} title="Configure the agent squad">
-              <span className="model-chip-dot" />
-              {(s.squad.workers || []).filter((w) => w && w.model).length} drafters
-              <span className="model-chip-sep">·</span>
-              Configure
-            </button>
+          {menuOpen ? (
+            <div className="moremenu" ref={menuRef}>
+              <div className="mm-row">
+                <span className="mm-label">Routing</span>
+                <div className="seg">
+                  {[['auto', '🧭 Auto'], ['solo', '⚡ Solo'], ['team', '⬡ Team'], ['image', '🎨 Image']].map(([v, label]) => (
+                    <button
+                      key={v}
+                      className={((v === 'auto' && auto) || (!auto && mode === v)) ? 'on' : ''}
+                      onClick={() => actions.setSettings(v === 'auto' ? { autoIntent: true } : { autoIntent: false, mode: v })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mm-row">
+                <span className="mm-label">🌐 Web research</span>
+                <button className={`seg-toggle ${s.settings.web !== false ? 'on' : ''}`} onClick={() => actions.setSettings({ web: s.settings.web === false })}>
+                  {s.settings.web !== false ? 'On' : 'Off'}
+                </button>
+              </div>
+              <div className="mm-row">
+                <span className="mm-label">Chat model</span>
+                <select
+                  className="mm-select"
+                  value={s.solo.provider + '/' + s.solo.model}
+                  onChange={(e) => {
+                    const [provider, ...rest] = e.target.value.split('/');
+                    actions.setSolo({ provider, model: rest.join('/') });
+                  }}
+                >
+                  {PROVIDERS.filter((p) => p.id !== 'demo' && (!p.needsKey || hasCredential(p.id, s))).map((p) => (
+                    <optgroup key={p.id} label={p.name}>
+                      {(s.liveModels[p.id] || p.models).map((m) => (
+                        <option key={p.id + m.id} value={p.id + '/' + m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              {mode === 'image' || intent?.mode === 'image' ? (
+                <>
+                  <div className="mm-row">
+                    <span className="mm-label">Image model</span>
+                    <select
+                      className="mm-select"
+                      value={img.provider + '/' + img.model}
+                      onChange={(e) => {
+                        const [provider, ...rest] = e.target.value.split('/');
+                        actions.setImage({ provider, model: rest.join('/') });
+                      }}
+                    >
+                      {IMAGE_PROVIDERS.map((p) =>
+                        p.models.map((m) => (
+                          <option key={p.id + m.id} value={p.id + '/' + m.id}>
+                            {p.name} · {m.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                  <div className="mm-row">
+                    <span className="mm-label">Aspect · count</span>
+                    <div className="seg">
+                      {IMAGE_ASPECTS.map((a) => (
+                        <button key={a.id} className={img.aspect === a.id ? 'on' : ''} onClick={() => actions.setImage({ aspect: a.id })} title={a.label}>
+                          {a.id === '1:1' ? '◻' : a.id === '16:9' ? '▭' : '▯'}
+                        </button>
+                      ))}
+                      {[1, 2, 4].map((n) => (
+                        <button key={n} className={img.count === n ? 'on' : ''} onClick={() => actions.setImage({ count: n })}>
+                          ×{n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+              <div className="mm-row mm-links">
+                {convHasTeam ? (
+                  <button className="mm-link" onClick={() => { actions.setAgentsOpen(true); setMenuOpen(false); }}>
+                    <IconAgents size={13} /> Agent pipeline
+                  </button>
+                ) : null}
+                {convHasMsgs ? (
+                  <button className="mm-link" onClick={() => { exportChat(); setMenuOpen(false); }}>
+                    <IconDownload size={13} /> Export chat
+                  </button>
+                ) : null}
+                <button className="mm-link" onClick={() => { actions.setView('agents'); setMenuOpen(false); }}>
+                  <IconBolt size={13} /> Configure team
+                </button>
+              </div>
+            </div>
           ) : null}
 
-          <span className="composer-tools">
-            {convHasTeam ? (
-              <button className={`icon-btn ${s.agentsOpen ? 'on' : ''}`} onClick={() => actions.setAgentsOpen(!s.agentsOpen)} title="Agent pipeline">
-                <IconAgents size={14} />
-              </button>
-            ) : null}
-            {convHasMsgs ? (
-              <button
-                className="icon-btn"
-                title="Export chat as Markdown"
-                onClick={() => {
-                  const conv = s.conversations.find((x) => x.id === s.activeId);
-                  if (!conv) return;
-                  const lines = [`# ${conv.title}`, ''];
-                  for (const m of conv.messages) {
-                    lines.push(m.role === 'user' ? `## 🧑 You` : `## ⬡ Assistant${m.model ? ` · ${m.model}` : ''}`);
-                    lines.push(m.content || '(no text)');
-                    if (m.images?.length) lines.push(`> ${m.images.length} image(s) attached`);
-                    lines.push('');
-                  }
-                  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
-                  const a = document.createElement('a');
-                  a.href = URL.createObjectURL(blob);
-                  a.download = 'nexusai-chat.md';
-                  a.click();
-                  URL.revokeObjectURL(a.href);
-                  actions.toast('Chat exported as Markdown ✓');
-                }}
-              >
-                <IconDownload size={14} />
-              </button>
-            ) : null}
-          </span>
-
-          <div className="composer-hint">Enter ↵ send · Shift+Enter newline</div>
+          <div className="composer-hint">{auto ? 'auto-routing on — type and it goes to the right team' : 'Enter ↵ send · Shift+Enter newline'}</div>
         </div>
-
-        {mode === 'image' ? (
-          <div className="composer-xtra">
-            <ImageModelPicker value={img} onChange={(v) => actions.setImage(v)} />
-            <div className="aspect-row">
-              {IMAGE_ASPECTS.map((a) => (
-                <button key={a.id} className={`aspect-btn ${img.aspect === a.id ? 'on' : ''}`} onClick={() => actions.setImage({ aspect: a.id })} title={a.label}>
-                  {a.id === '1:1' ? '◻' : a.id === '16:9' ? '▭' : '▯'}
-                </button>
-              ))}
-            </div>
-            <div className="aspect-row">
-              {[1, 2, 4].map((n) => (
-                <button key={n} className={`aspect-btn ${img.count === n ? 'on' : ''}`} onClick={() => actions.setImage({ count: n })} title={`${n} image${n > 1 ? 's' : ''}`}>
-                  ×{n}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
       <div className="composer-note">
-        {mode === 'team'
-          ? 'Planner briefs the drafters · reviewer merges · synthesizer ships the final answer'
-          : mode === 'image'
+        {mode === 'image'
           ? img.provider === 'pollinations'
             ? 'Free image generation via Pollinations — no key needed. Click a result to open the editor.'
             : 'DALL·E / GPT-Image via your OpenAI key. Click a result to open the editor.'
-          : 'One model, streamed directly'}
+          : 'Planner briefs the drafters · reviewer merges · synthesizer ships the final answer'}
       </div>
     </div>
   );

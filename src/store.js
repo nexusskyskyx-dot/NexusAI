@@ -7,6 +7,7 @@ import { streamChat, friendlyError, forcedStreamChat } from '@lib/ai.js';
 import { IMAGE_ASPECTS } from '@lib/images.js';
 import { runImagePipeline } from '@lib/imagepipe.js';
 import { autoConfigure } from '@lib/autobest.js';
+import { detectIntent } from '@lib/intent.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
 import { searchWeb, researchQuery } from '@lib/websearch.js';
 import { runProject, upgradeProject as runUpgrade } from '@lib/projects.js';
@@ -296,7 +297,25 @@ async function generate(convId, history) {
   const conv = state.conversations.find((c) => c.id === convId);
   if (!conv) return;
   const { settings, keys, solo, squad } = state;
-  const mode = settings.mode || 'team';
+
+  // 🧭 v1.18 Auto-Intent — the message says where it wants to go
+  const auto = settings.autoIntent !== false;
+  const intent = auto ? detectIntent(history[history.length - 1]?.content || '') : { mode: null };
+  if (auto && intent.mode === 'project' && !state.projectBusy) {
+    // route to the project team — no chat message, straight to the builders
+    actions.setView('projects');
+    startProject(history[history.length - 1].content);
+    actions.toast('🛠 Routed to Projects — the team is on it');
+    return;
+  }
+  const mode = auto
+    ? intent.mode === 'image'
+      ? 'image'
+      : intent.mode === 'search' || intent.smalltalk
+      ? 'solo'
+      : settings.mode || 'team'
+    : settings.mode || 'team';
+  const webOn = auto && intent.mode === 'search' ? true : settings.web !== false;
 
   const msg = {
     id: uid(),
@@ -360,7 +379,7 @@ async function generate(convId, history) {
         count,
         apiKey: keys[cfg.provider === 'openai-images' ? 'openai' : cfg.provider],
         signal,
-        web: settings.web !== false,
+        web: webOn,
         memory,
         fallbacks: [
           { provider: 'pollinations', model: 'flux' },
@@ -386,7 +405,7 @@ async function generate(convId, history) {
       let reasoning = '';
       // 🌐 Researcher — web knowledge before the model answers
       let soloSystem = SYSTEMS.solo;
-      if (settings.web !== false) {
+      if (webOn) {
         try {
           const web = await searchWeb(researchQuery(history[history.length - 1]?.content || '', 'chat'), { signal, deep: true });
           if (web.ok) {
