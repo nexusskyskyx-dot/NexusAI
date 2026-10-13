@@ -371,6 +371,23 @@ export const IMAGE_PROVIDERS = [
     ],
   },
   {
+    id: 'gemini-image',
+    name: 'Gemini Image',
+    vendor: 'Free tier · Gemini key',
+    kind: 'gemini-image',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+    needsKey: true,
+    keyRef: 'gemini',
+    keyUrl: 'https://aistudio.google.com/apikey',
+    free: true,
+    direct: true,
+    note: 'Google’s native image generation (nano-banana class) — strong prompt following and text-in-image, free tier with your Google AI Studio key. Called straight from your browser.',
+    models: [
+      { id: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Image', tags: ['FREE', 'BEST'] },
+      { id: 'gemini-2.0-flash-preview-image-generation', label: 'Gemini 2.0 Flash Image', tags: ['FREE', 'FAST'] },
+    ],
+  },
+  {
     id: 'pollinations',
     name: 'Pollinations Image',
     vendor: 'Free · no key',

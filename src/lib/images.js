@@ -3,7 +3,7 @@
 // Pollinations (free, no key, straight from the browser) and OpenAI images
 // (DALL·E 3 / GPT-Image 1 via the local server proxy).
 // ─────────────────────────────────────────────────────────────────────────────
-import { getImageProvider } from '@shared/providers.js';
+import { getImageProvider, IMAGE_PROVIDERS } from '@shared/providers.js';
 
 export const IMAGE_ASPECTS = [
   { id: '1:1', label: 'Square', w: 1024, h: 1024 },
@@ -71,6 +71,31 @@ export async function generateImage({ provider, model, prompt, w = 1024, h = 102
     }
   }
 
+  if (reg.kind === 'gemini-image') {
+    // native Gemini image generation — free tier with an AI Studio key
+    const key = apiKey || '';
+    if (!key) throw new Error('Gemini Image needs a Google AI Studio key (free) — add it in Keys');
+    const aspectHint = aspect && aspect !== '1:1' ? ` (aspect ratio ${aspect})` : '';
+    const r = await fetch(`${reg.baseUrl}/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: String(prompt).slice(0, 1800) + aspectHint }] }],
+        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+      }),
+      signal,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j?.error?.message || `Gemini Image error (HTTP ${r.status})`);
+    const part = (j?.candidates?.[0]?.content?.parts || []).find((x) => x?.inlineData?.data);
+    if (!part) throw new Error(j?.candidates?.[0]?.content?.parts?.[0]?.text || 'Gemini returned no image (safety filter or quota?)');
+    const a = IMAGE_ASPECTS.find((x) => x.id === aspect) || IMAGE_ASPECTS[0];
+    return {
+      src: `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`,
+      w: a.w, h: a.h, seed, model, provider, prompt, remote: false,
+    };
+  }
+
   if (reg.kind === 'server-image') {
     // v1.20 · the NexusAI server engine — forced flagship escalation + cache
     const r = await fetch(reg.baseUrl || '/api/generate', {
@@ -81,7 +106,11 @@ export async function generateImage({ provider, model, prompt, w = 1024, h = 102
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j?.ok || !j?.b64) throw new Error(j?.error || `NexusAI Engine error (HTTP ${r.status})`);
-    return { src: `data:${j.contentType || 'image/jpeg'};base64,${j.b64}`, w, h, seed, model: j.model, provider, prompt, remote: false };
+    return {
+      src: `data:${j.contentType || 'image/jpeg'};base64,${j.b64}`,
+      w, h, seed, model: j.model, provider, prompt, remote: false,
+      requestedModel: j.requested || model, fellBack: !!j.fellBack && j.model !== (j.requested || model),
+    };
   }
 
   if (reg.kind === 'openai-images') {
@@ -169,4 +198,13 @@ export function recoverChain(im) {
   if (typeof im?.data === 'string' && im.data.startsWith('data:')) chain.push(im.data);
   if (im?.regen?.url) chain.push(im.regen.url);
   return [...new Set(chain)];
+}
+
+// friendly label for any image model id ('black-forest-labs/flux.1-schnell' → 'FLUX schnell')
+export function imageModelLabel(modelId) {
+  for (const p of IMAGE_PROVIDERS) {
+    const m = (p.models || []).find((x) => x.id === modelId);
+    if (m) return m.label;
+  }
+  return String(modelId || '').split('/').pop();
 }

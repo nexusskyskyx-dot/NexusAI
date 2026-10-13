@@ -111,15 +111,19 @@ export function autoConfigure(s) {
   // key exists (explicitly requested), otherwise free Flux.
   let image = s.image || {};
   const wantsOpenAI = hasCredential('openai', s);
-  const onDefault = !image.provider || image.provider === 'pollinations';
+  const onDefault = !image.provider || image.provider === 'pollinations' || image.provider === 'nexus-engine'; // engine is OUR default, not a user pick
+  const wantsGemini = hasCredential('gemini', s);
   if (wantsOpenAI && onDefault) {
     image = { ...image, provider: 'openai-images', model: 'dall-e-3' };
     changes.push('Images → DALL·E 3');
-  } else if (!wantsOpenAI && image.provider === 'openai-images') {
+  } else if (!wantsOpenAI && wantsGemini && (onDefault || image.provider === 'openai-images')) {
+    image = { ...image, provider: 'gemini-image', model: 'gemini-2.5-flash-image' };
+    changes.push('Images → Gemini 2.5 Flash Image');
+  } else if (!wantsOpenAI && !wantsGemini && image.provider === 'openai-images') {
     image = { ...image, provider: 'nexus-engine', model: 'black-forest-labs/flux.2-pro' };
     changes.push('Images → FLUX 2 Pro (engine)');
   } else if (onDefault) {
-    image = { ...image, provider: 'nexus-engine', model: 'black-forest-labs/flux.2-pro' };
+    image = { ...image, provider: wantsGemini ? 'gemini-image' : 'nexus-engine', model: wantsGemini ? 'gemini-2.5-flash-image' : 'black-forest-labs/flux.2-pro' };
   }
 
   return { solo, squad, prj, image, changes };

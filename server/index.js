@@ -87,7 +87,7 @@ app.post('/api/generate', async (req, res) => {
       { prompt: String(prompt), model: model ? String(model) : undefined, w: Number(w) || 1024, h: Number(h) || 1024, seed: seed != null ? Number(seed) : Math.floor(Math.random() * 1e9) },
       fetch
     );
-    res.json({ ok: true, b64: out.b64, model: out.model, contentType: out.contentType, cached: out.cached });
+    res.json({ ok: true, b64: out.b64, model: out.model, contentType: out.contentType, cached: out.cached, requested: out.requested, fellBack: !!out.fellBack });
   } catch (e) {
     res.status(502).json({ ok: false, error: e?.message || 'generation failed' });
   }

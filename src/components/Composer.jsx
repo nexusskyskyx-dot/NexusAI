@@ -166,7 +166,7 @@ export default function Composer() {
                         actions.setImage({ provider, model: rest.join('/') });
                       }}
                     >
-                      {IMAGE_PROVIDERS.map((p) =>
+                      {IMAGE_PROVIDERS.filter((p) => !p.needsKey || hasCredential(p.keyRef || p.id, s)).map((p) =>
                         p.models.map((m) => (
                           <option key={p.id + m.id} value={p.id + '/' + m.id}>
                             {p.name} · {m.label}

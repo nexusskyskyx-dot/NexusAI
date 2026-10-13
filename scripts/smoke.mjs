@@ -699,7 +699,7 @@ console.log(`[15] open air — input-first composer ✓ · one intent chip, zero
   const htmlRun17 = renderToString(React11.createElement(Message17, { msg: msgRun17, isLast: true }));
   if (!/NEXUSAI is (drawing|thinking|searching)/i.test(htmlRun17)) throw new Error('main loader phase text missing mid-run');
   if (!htmlRun17.includes('nx-hex')) throw new Error('pulsing hexagon loader missing mid-run');
-  if (!/Websearcher · Enhancer · Image Tools · Upscaler · Previewer/.test(htmlRun17)) throw new Error('image team roster line missing');
+  if (!/image 1\/1/.test(htmlRun17)) throw new Error('live stage detail missing');
   const msgDone17 = { id: 'm17d', role: 'assistant', kind: 'image', mode: 'image', streaming: false, ms: 24000, images: [
     { src: 'blob:z', w: 1024, h: 1024, model: 'flux', check: 'pass', upscaled: true },
   ], istages: [
@@ -978,6 +978,8 @@ function modelLabelSafeguard(p, m) {
 
 // 23 · image engine — flagship escalation, forced ladder, disk cache
 {
+  const fs23 = await import('node:fs');
+  try { fs23.rmSync(new URL('../.cache/imgengine', import.meta.url), { recursive: true, force: true }); } catch {} // fresh cache per run
   const engine23 = await import('../server/imagegen.js');
   const { IMAGE_PROVIDERS: IP23 } = await import('../shared/providers.js');
 
@@ -1048,6 +1050,76 @@ function modelLabelSafeguard(p, m) {
   const r40023 = await realFetch23('http://localhost:8787/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
   if (r40023.status !== 400) throw new Error('empty prompt should 400');
   console.log(`[23] image engine — flagship ladder ✓ (3 rungs walked) · disk cache hit, zero network ✓ · custom-model-first ✓ · all-fail lists every rung ✓ · client transport ✓ · live /api/generate cached ✓`);
+}
+
+// 24 · one loader, honest fallbacks, gemini image
+{
+  const Message24 = (await import('../src/components/Message.jsx')).default;
+  const { autoConfigure: ac24 } = await import('../src/lib/autobest.js');
+
+  // ── double-loader fix: streaming image message with stages = exactly ONE loader
+  const msgRun24 = { id: 'r24', role: 'assistant', kind: 'image', mode: 'image', streaming: true, images: [], istages: [
+    { stage: 'research', status: 'done' }, { stage: 'enhance', status: 'done' }, { stage: 'generate', status: 'run', detail: 'image 1/1' },
+  ] };
+  const htmlRun24 = renderToString(React11.createElement(Message24, { msg: msgRun24, isLast: true }));
+  const hexCount24 = (htmlRun24.match(/nx-hex/g) || []).length;
+  const thinkCount24 = (htmlRun24.match(/NEXUSAI is /g) || []).length;
+  if (hexCount24 !== 1 || thinkCount24 !== 1) throw new Error(`expected exactly one loader, got hex=${hexCount24} text=${thinkCount24}`);
+  // no stages yet → still exactly one (the early wait)
+  const msgEarly24 = { id: 'e24', role: 'assistant', kind: 'image', mode: 'image', streaming: true, images: [] };
+  const htmlEarly24 = renderToString(React11.createElement(Message24, { msg: msgEarly24, isLast: true }));
+  if ((htmlEarly24.match(/nx-hex/g) || []).length !== 1) throw new Error('early image wait loader count wrong');
+
+  // ── honest fallback: fold line says who stood in for whom
+  const msgDone24 = { id: 'd24', role: 'assistant', kind: 'image', mode: 'image', streaming: false, images: [
+    { src: 'blob:z', w: 1024, h: 1024, model: 'black-forest-labs/flux.1-schnell', requestedModel: 'google/gemini-3.1-flash-image', fellBack: true, check: 'pass' },
+  ], istages: [
+    { stage: 'research', status: 'done' }, { stage: 'enhance', status: 'done' }, { stage: 'generate', status: 'done' },
+    { stage: 'upscale', status: 'done' }, { stage: 'check', status: 'done' },
+  ], enhancedPrompt: 'x' };
+  const htmlDone24 = renderToString(React11.createElement(Message24, { msg: msgDone24, isLast: false }));
+  if (!/Drew 1 image/.test(htmlDone24) || !/Previewed — 1\/1 PASS/.test(htmlDone24)) throw new Error('fold heads missing');
+  const { imageModelLabel: lbl24 } = await import('../src/lib/images.js');
+  if (lbl24('black-forest-labs/flux.1-schnell') !== 'FLUX schnell' || lbl24('gemini-2.5-flash-image') !== 'Gemini 2.5 Flash Image' || lbl24('unknown-model-x') !== 'unknown-model-x') throw new Error('image model labels wrong');
+  const src24 = (await import('node:fs')).readFileSync(new URL('../src/components/Message.jsx', import.meta.url), 'utf8');
+  if (!/stood in for/.test(src24) || !src24.includes('fellBack')) throw new Error('fallback credit wiring missing from the fold body');
+
+  // ── gemini image transport: keyless error + full request shape
+  const { generateImage: gi24 } = await import('../src/lib/images.js');
+  let err24 = '';
+  try { await gi24({ provider: 'gemini-image', model: 'gemini-2.5-flash-image', prompt: 'x', apiKey: '' }); } catch (e) { err24 = e.message; }
+  if (!/Google AI Studio key/.test(err24)) throw new Error('missing-key error not helpful: ' + err24);
+  const realFetch24 = globalThis.fetch;
+  let geminiReq24 = null;
+  globalThis.fetch = async (url, opts) => {
+    geminiReq24 = { url, opts };
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aW1n' } }] } }] }) };
+  };
+  const g24 = await gi24({ provider: 'gemini-image', model: 'gemini-2.5-flash-image', prompt: 'a tesla logo', aspect: '16:9', w: 1280, h: 720, apiKey: 'AIza-test' });
+  globalThis.fetch = realFetch24;
+  if (!g24.src.startsWith('data:image/png;base64,')) throw new Error('gemini image src wrong');
+  if (!geminiReq24.url.includes('gemini-2.5-flash-image:generateContent')) throw new Error('gemini url wrong');
+  if (geminiReq24.opts.headers['x-goog-api-key'] !== 'AIza-test') throw new Error('gemini key header wrong');
+  const body24 = JSON.parse(geminiReq24.opts.body);
+  if (!body24.generationConfig.responseModalities.includes('IMAGE')) throw new Error('responseModalities missing');
+  if (!/aspect ratio 16:9/.test(body24.contents[0].parts[0].text)) throw new Error('aspect hint missing');
+
+  // ── autobest: gemini key promotes images to Gemini 2.5 Flash Image
+  const st24 = { keys: { gemini: 'AIza-x' }, envKeys: [], solo: {}, squad: { workers: [], planner: {}, critic: {}, synth: {} }, prj: {}, image: { provider: 'nexus-engine', model: 'black-forest-labs/flux.2-pro' } };
+  const img24 = ac24(st24).image;
+  if (img24.provider !== 'gemini-image' || img24.model !== 'gemini-2.5-flash-image') throw new Error('gemini image promotion missing: ' + JSON.stringify(img24));
+  // no keys at all → engine default stays
+  const img24b = ac24({ keys: {}, envKeys: [], solo: {}, squad: { workers: [], planner: {}, critic: {}, synth: {} }, prj: {}, image: { provider: 'pollinations', model: 'flux' } }).image;
+  if (img24b.provider !== 'nexus-engine') throw new Error('no-key default should be engine');
+
+  // ── engine route passes fallback truth (cached entry from test 23 still there)
+  const rr24 = await realFetch24('http://localhost:8787/api/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: 'cached route test', model: 'black-forest-labs/flux.2-pro', w: 300, h: 300, seed: 55 }),
+  });
+  const rj24 = await rr24.json();
+  if (!rj24.ok || rj24.requested !== 'black-forest-labs/flux.2-pro' || typeof rj24.fellBack !== 'boolean') throw new Error('engine fallback truth missing from route');
+  console.log(`[24] image fixes — exactly one loader ✓ · honest fallback credit ✓ · gemini image transport ✓ (key guard, headers, modalities, aspect hint) · autobest gemini promotion ✓ · engine fallback truth ✓`);
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');

@@ -116,7 +116,7 @@ export async function generateImage({ prompt, model, w, h, seed }, fetchImpl = f
 
   for (const m of order) {
     const hit = cacheGet({ ...params, model: m });
-    if (hit) return { ...hit, cached: true };
+    if (hit) return { ...hit, cached: true, requested: order[0], fellBack: m !== order[0] };
 
     try {
       const r = await fetchWithTimeout(fetchImpl, buildUrl({ ...params, model: m }), 100_000);
@@ -131,7 +131,8 @@ export async function generateImage({ prompt, model, w, h, seed }, fetchImpl = f
         continue;
       }
       cachePut({ ...params, model: m }, buf, ct, m);
-      return { b64: buf.toString('base64'), model: m, contentType: ct, cached: false };
+      const requested = order[0];
+      return { b64: buf.toString('base64'), model: m, contentType: ct, cached: false, requested, fellBack: m !== requested };
     } catch (e) {
       errors.push(`${m}: ${e?.message || 'failed'}`);
     }

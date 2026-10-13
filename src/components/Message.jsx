@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useStore, actions } from '../store.js';
 import { renderMarkdown } from '@lib/markdown.js';
 import { previewableLang, extForLang } from '@lib/preview.js';
-import { recoverChain } from '@lib/images.js';
-import { modelLabel } from '@shared/providers.js';
+import { recoverChain, imageModelLabel } from '@lib/images.js';
+import { modelLabel, IMAGE_PROVIDERS } from '@shared/providers.js';
 import { IconCopy, IconCheck, IconRefresh, IconTrash, IconEdit, IconBrain, IconAgents, IconEye } from './Icons.jsx';
 import NexusLoader, { Fold, FoldRow, TEAM_PHASE, IMAGE_PHASE } from './NexusLoader.jsx';
 
@@ -92,7 +92,9 @@ function ImageLog({ msg }) {
     <FoldRow>
       {done.has('research') ? <Fold label="Searched">Researched visual references for the subject.</Fold> : null}
       {done.has('enhance') ? <Fold label="Enhanced">{msg.enhancedPrompt || 'The prompt was rewritten for maximum quality.'}</Fold> : null}
-      {done.has('generate') ? <Fold label={`Drew ${nImg} image${nImg === 1 ? '' : 's'}`}>{msg.images?.map((im, i) => <div key={i} className="fold-line">{im.model} · {im.w}×{im.h}{im.upscaled ? ' · sharpened' : ''}</div>)}</Fold> : null}
+      {done.has('generate') ? <Fold label={`Drew ${nImg} image${nImg === 1 ? '' : 's'}`}>{msg.images?.map((im, i) => (
+        <div key={i} className="fold-line">{imageModelLabel(im.model)} · {im.w}×{im.h}{im.upscaled ? ' · sharpened' : ''}{im.fellBack ? ` · stood in for ${String(im.requestedModel || '').split('/').pop()}` : ''}</div>
+      ))}</Fold> : null}
       {done.has('upscale') && upscaled ? <Fold label="Sharpened">Unsharp-mask + color grade pass for crisp output.</Fold> : null}
       {done.has('check') ? (
         <Fold label={`Previewed — ${passCount}/${Math.max(nImg, 1)} PASS${secs ? ' · ' + secs : ''}`} tone={passCount === nImg && nImg > 0 ? 'ok' : 'warn'}>
@@ -334,9 +336,9 @@ export default function Message({ msg, isLast }) {
               <ImgCard key={i} im={im} onOpen={() => actions.openStudio(im, msg.id)} />
             ))}
           </div>
-        ) : (
-          <NexusLoader phase={msg.istages?.length ? IMAGE_PHASE[msg.istages.filter((x) => x.status === 'run').slice(-1)[0]?.stage] || 'drawing' : 'drawing'} sub={msg.istages?.length ? 'Websearcher · Enhancer · Image Tools · Upscaler · Previewer' : msg.model} size={34} />
-        )}
+        ) : !msg.istages?.length ? (
+          <NexusLoader phase="drawing" sub={msg.model} size={34} />
+        ) : null}
           {msg.images?.length && !msg.streaming && msg.enhancedPrompt ? (
             <div className="img-enhanced" title={msg.enhancedPrompt}>✨ {msg.enhancedPrompt}</div>
           ) : null}

@@ -382,6 +382,7 @@ async function generate(convId, history) {
         web: webOn,
         memory,
         fallbacks: [
+          { provider: 'nexus-engine', model: 'black-forest-labs/flux.1-schnell' },
           { provider: 'pollinations', model: 'flux' },
           { provider: 'pollinations', model: 'turbo' },
         ],
@@ -390,6 +391,8 @@ async function generate(convId, history) {
           queueStreamPatch(convId, msg.id, { istages: [...istages] });
         },
       });
+      const fb = out.images.find((im) => im.fellBack && im.requestedModel && im.requestedModel !== im.model);
+      if (fb) actions.toast(`⚡ ${fb.requestedModel.split('/').pop()} unavailable — drew with ${String(fb.model).split('/').pop()}`);
       if (!out.images.length && out.warns.length) {
         finish({ images: [], istages, enhancedPrompt: out.enhancedPrompt, error: `Image Team failed: ${out.warns[0]}` });
       } else {
