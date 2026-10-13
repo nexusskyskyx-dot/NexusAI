@@ -782,4 +782,90 @@ console.log(`[15] open air — input-first composer ✓ · slim scrollable strip
   console.log(`[18] image durability — chain src→data→regen ✓ · recipes on every image ✓ · progressive strip (kept ${keptData18}/3 data, all regen) ✓ · UI recovery + last-resort card ✓`);
 }
 
+// 19 · auto-best + forced calls + image memory
+{
+  const { autoConfigure } = await import('../src/lib/autobest.js');
+  const { forcedStreamChat } = await import('../src/lib/ai.js');
+  const { runImagePipeline: pipe19 } = await import('../src/lib/imagepipe.js');
+
+  // ── auto-best: ranking + upgrade rules
+  const st19 = { keys: { groq: 'gsk_x', github: 'ghp_x' }, envKeys: [], solo: { provider: 'pollinations', model: 'openai' },
+    squad: { workers: [{ provider: 'pollinations', model: 'qwen-coder' }], planner: { provider: 'pollinations', model: 'mistral' }, critic: { provider: 'pollinations', model: 'mistral' }, synth: { provider: 'pollinations', model: 'openai' } },
+    prj: { provider: 'pollinations', model: 'qwen-coder' }, image: { provider: 'pollinations', model: 'flux' } };
+  const cfg19 = autoConfigure(st19);
+  if (cfg19.solo.provider !== 'groq' || cfg19.solo.model !== 'llama-3.3-70b-versatile') throw new Error('solo not upgraded to best chat: ' + JSON.stringify(cfg19.solo));
+  if (cfg19.squad.workers[0].provider !== 'groq' || cfg19.squad.workers[0].model !== 'openai/gpt-oss-120b') throw new Error('coder not upgraded: ' + JSON.stringify(cfg19.squad.workers[0]));
+  if (cfg19.prj.provider !== 'groq') throw new Error('project model not upgraded');
+  if (!cfg19.changes.length) throw new Error('changes list empty');
+  // deliberate working pick is never touched
+  const st19b = { ...st19, solo: { provider: 'github', model: 'openai/gpt-4o-mini' } };
+  if (JSON.stringify(autoConfigure(st19b).solo) !== JSON.stringify(st19b.solo)) throw new Error('deliberate pick was clobbered');
+  // dead slot (key removed) remaps
+  const st19c = { keys: {}, envKeys: [], solo: { provider: 'groq', model: 'llama-3.3-70b-versatile' }, squad: { workers: [], planner: {}, critic: {}, synth: {} }, prj: {}, image: {} };
+  const cfg19c = autoConfigure(st19c);
+  if (cfg19c.solo.provider !== 'pollinations') throw new Error('dead solo not remapped to free default');
+  // image: openai key → DALL·E, no key → free flux
+  const st19d = { keys: { openai: 'sk-x' }, envKeys: [], solo: {}, squad: { workers: [], planner: {}, critic: {}, synth: {} }, prj: {}, image: { provider: 'pollinations', model: 'flux' } };
+  const img19 = autoConfigure(st19d).image;
+  if (img19.provider !== 'openai-images' || img19.model !== 'dall-e-3') throw new Error('image not upgraded to DALL·E: ' + JSON.stringify(img19));
+  const img19b = autoConfigure({ ...st19d, keys: {}, image: img19 }).image;
+  if (img19b.provider !== 'pollinations' || img19b.model !== 'flux') throw new Error('image not remapped to free after key loss');
+
+  // ── forced chat cascade: primary dies → next candidate answers, credited
+  const attempts19 = [];
+  const r19 = await forcedStreamChat(
+    [{ provider: 'dead-one', model: 'm1' }, { provider: 'alive', model: 'm2' }, { provider: 'alive', model: 'm3' }],
+    { messages: [], onDelta: () => {} },
+    async (o) => {
+      attempts19.push(o.provider);
+      if (o.provider === 'dead-one') throw new Error('network dead');
+      return { text: 'answer from ' + o.provider };
+    }
+  );
+  if (r19.provider !== 'alive' || r19.text !== 'answer from alive' || r19.fallbackFrom !== 'dead-one') throw new Error('forced cascade wrong: ' + JSON.stringify(r19));
+  if (JSON.stringify(attempts19) !== JSON.stringify(['dead-one', 'alive'])) throw new Error('cascade tried wrong candidates');
+  // partial stream is kept, never restarted
+  const r19b = await forcedStreamChat([{ provider: 'flaky', model: 'm' }], { onDelta: () => {} }, async (o) => { o.onDelta('partial '); throw new Error('dropped mid-stream'); });
+  if (r19b.text !== 'partial ' || !r19b.partial) throw new Error('partial text was discarded');
+  // every candidate dead → throws
+  let threw19 = false;
+  try { await forcedStreamChat([{ provider: 'a', model: 'x' }, { provider: 'b', model: 'y' }], {}, async () => { throw new Error('down'); }); } catch { threw19 = true; }
+  if (!threw19) throw new Error('all-dead cascade should throw');
+
+  // ── image memory: enhancer receives earlier images
+  let enhInput19 = '';
+  await pipe19({
+    prompt: 'another one, but red', count: 1, web: false,
+    memory: [{ prompt: 'a blue dragon over a city', enhanced: 'a colossal azure dragon, volumetric light' }],
+    complete: async ({ user }) => { enhInput19 = user; return 'the same colossal dragon, now crimson'; },
+    generate: async () => ({ src: 'blob:m', w: 1024, h: 1024, model: 'flux', provider: 'pollinations', prompt: 'p', remote: false }),
+    upscale: async (im) => ({ ...im, upscaled: false }),
+    check: async () => ({ pass: true }),
+  });
+  if (!/Earlier images in this conversation/.test(enhInput19) || !/blue dragon/.test(enhInput19)) throw new Error('image memory not fed to enhancer');
+
+  // ── forced image cascade: primary dies → pollinations forced → succeeds
+  const genCalls19 = [];
+  const stages19 = [];
+  const out19 = await pipe19({
+    prompt: 'a castle', count: 1, web: false, provider: 'openai-images', model: 'dall-e-3',
+    fallbacks: [{ provider: 'pollinations', model: 'flux' }],
+    complete: async () => 'a mighty castle on a cliff, golden hour',
+    generate: async (o) => { genCalls19.push(o.provider + '/' + o.model); if (o.provider === 'openai-images') throw new Error('quota exceeded'); return { src: 'blob:fb', w: 1024, h: 1024, model: o.model, provider: o.provider, prompt: 'p', remote: false }; },
+    upscale: async (im) => ({ ...im, upscaled: false }),
+    check: async () => ({ pass: true }),
+    onStage: (st, status, detail) => stages19.push(status === 'fail' ? detail : ''),
+  });
+  if (out19.images.length !== 1 || out19.images[0].provider !== 'pollinations') throw new Error('forced image fallback failed');
+  if (JSON.stringify(genCalls19) !== JSON.stringify(['openai-images/dall-e-3', 'pollinations/flux'])) throw new Error('image cascade wrong: ' + JSON.stringify(genCalls19));
+  if (!stages19.some((x) => /forcing next/.test(x))) throw new Error('forcing stage not reported');
+
+  // ── live store: setKeys actually triggers auto-configuration
+  A11.setKeys({ groq: 'gsk_live_test_1234567890abcd' });
+  const probe19 = renderToString(React11.createElement(() => JSON.stringify([useStore11().solo.provider, useStore11().solo.model]).replace(/"/g, '')));
+  if (!probe19.includes('groq')) throw new Error('setKeys did not auto-configure solo — got ' + probe19);
+  A11.removeKey('groq');
+  console.log(`[19] auto-best + forced calls — ranking/upgrades ✓ · deliberate picks kept ✓ · dead remap ✓ · image best (DALL·E⇄Flux) ✓ · chat cascade credited ✓ · partial kept ✓ · image memory ✓ · forced image fallback ✓ · setKeys auto-configures ✓`);
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');

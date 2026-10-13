@@ -3,9 +3,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useSyncExternalStore } from 'react';
 import { storage, uid } from '@lib/storage.js';
-import { streamChat, friendlyError } from '@lib/ai.js';
+import { streamChat, friendlyError, forcedStreamChat } from '@lib/ai.js';
 import { IMAGE_ASPECTS } from '@lib/images.js';
 import { runImagePipeline } from '@lib/imagepipe.js';
+import { autoConfigure } from '@lib/autobest.js';
 import { runTeam, SYSTEMS } from '@lib/engine.js';
 import { searchWeb, researchQuery } from '@lib/websearch.js';
 import { runProject, upgradeProject as runUpgrade } from '@lib/projects.js';
@@ -183,7 +184,13 @@ async function pingServer() {
   try {
     const r = await fetch('/api/health', { cache: 'no-store' });
     const j = await r.json();
-    setState({ serverOk: !!j.ok, envKeys: Array.isArray(j.envKeys) ? j.envKeys : [] });
+    const envNow = Array.isArray(j.envKeys) ? j.envKeys : [];
+    const envWas = state.envKeys || [];
+    setState({ serverOk: !!j.ok, envKeys: envNow });
+    if (!state.envApplied && envNow.some((k) => !envWas.includes(k))) {
+      setState({ envApplied: true });
+      applyAutoBest('server keys');
+    }
   } catch {
     setState({ serverOk: false });
   }
@@ -336,6 +343,13 @@ async function generate(convId, history) {
       const count = Math.max(1, Math.min(4, cfg.count || 1));
       const prompt = history[history.length - 1]?.content || '';
       const istages = [];
+      // image memory: earlier images in this conversation (prompt + enhanced)
+      const memory = [];
+      let lastUser = '';
+      for (const m of history.slice(0, -1)) {
+        if (m.role === 'user' && m.content) lastUser = m.content;
+        else if (m.kind === 'image') memory.push({ prompt: lastUser, enhanced: m.enhancedPrompt || '' });
+      }
       const out = await runImagePipeline({
         prompt,
         provider: cfg.provider || 'pollinations',
@@ -347,6 +361,11 @@ async function generate(convId, history) {
         apiKey: keys[cfg.provider === 'openai-images' ? 'openai' : cfg.provider],
         signal,
         web: settings.web !== false,
+        memory,
+        fallbacks: [
+          { provider: 'pollinations', model: 'flux' },
+          { provider: 'pollinations', model: 'turbo' },
+        ],
         onStage: (stage, status, detail) => {
           istages.push({ stage, status, detail });
           queueStreamPatch(convId, msg.id, { istages: [...istages] });
@@ -378,26 +397,37 @@ async function generate(convId, history) {
           if (e?.name === 'AbortError') throw e;
         }
       }
-      const r = await streamChat({
-        provider: solo.provider,
-        model: solo.model,
-        messages: history,
-        system: soloSystem,
-        temperature: settings.temperature,
-        maxTokens: settings.maxTokens,
-        apiKey: keys[solo.provider],
-        signal,
-        transport: settings.transport,
-        onDelta: (d) => {
-          text += d;
-          queueStreamPatch(convId, msg.id, { content: text });
+      // ⚡ FORCED CALL (v1.17): the primary model, then the entire failover
+      // pool — the answer always arrives from somewhere.
+      const candidates = [
+        { provider: solo.provider, model: solo.model },
+        ...buildPool().filter((c) => !(c.provider === solo.provider && c.model === solo.model)),
+      ];
+      const r = await forcedStreamChat(
+        candidates,
+        {
+          messages: history,
+          system: soloSystem,
+          temperature: settings.temperature,
+          maxTokens: settings.maxTokens,
+          apiKey: keys[solo.provider],
+          signal,
+          transport: settings.transport,
+          onDelta: (d) => {
+            text += d;
+            queueStreamPatch(convId, msg.id, { content: text });
+          },
+          onReasoning: (d) => {
+            reasoning += d;
+            queueStreamPatch(convId, msg.id, { reasoning });
+          },
         },
-        onReasoning: (d) => {
-          reasoning += d;
-          queueStreamPatch(convId, msg.id, { reasoning });
-        },
-      });
-      finish({ content: r.text || text, reasoning: r.reasoning || reasoning });
+        (o) => streamChat({ ...o, apiKey: keys[o.provider] || keys[solo.provider] || '' })
+      );
+      if (r.fallbackFrom) {
+        actions.toast(`⚡ ${r.fallbackFrom} failed — answered by ${modelLabel(r.provider, r.model)}`);
+      }
+      finish({ content: r.text || text, reasoning: r.reasoning || reasoning, model: modelLabel(r.provider, r.model) });
     } else {
       // local accumulators — never read streamed content back from state (it
       // lags behind the 60ms flush buffer and would drop text)
@@ -649,6 +679,16 @@ function boot() {
   fetchLiveOpenRouter();
 }
 
+// ── Auto-Best (v1.17): keys changed → re-select the best models everywhere.
+// Only upgrades default/dead slots; deliberate working picks are never touched.
+function applyAutoBest(reason = 'keys changed') {
+  const cfg = autoConfigure(state);
+  if (!cfg.changes.length) return;
+  setState({ solo: cfg.solo, squad: cfg.squad, prj: cfg.prj, image: cfg.image });
+  schedulePersist();
+  actions.toast(`⚡ Auto-configured (${reason}): ${cfg.changes.slice(0, 3).join(' · ')}${cfg.changes.length > 3 ? ' +' + (cfg.changes.length - 3) : ''}`);
+}
+
 // ── actions ──────────────────────────────────────────────────────────────────
 export const actions = {
   boot,
@@ -660,13 +700,18 @@ export const actions = {
     document.documentElement.dataset.acc = accent;
     setState((s) => ({ settings: { ...s.settings, accent } }), { persist: true });
   },
-  setKeys: (patch) => setState((s) => ({ keys: { ...s.keys, ...patch } }), { persist: true }),
-  removeKey: (providerId) =>
+  setKeys: (patch) => {
+    setState((s) => ({ keys: { ...s.keys, ...patch } }), { persist: true });
+    if (Object.values(patch || {}).some(Boolean)) applyAutoBest('new key');
+  },
+  removeKey: (providerId) => {
     setState((s) => {
       const keys = { ...s.keys };
       delete keys[providerId];
       return { keys };
-    }, { persist: true }),
+    }, { persist: true });
+    applyAutoBest('key removed');
+  },
   setSolo: (patch) => setState((s) => ({ solo: { ...s.solo, ...patch } }), { persist: true }),
   setImage: (patch) => setState((s) => ({ image: { ...s.image, ...patch } }), { persist: true }),
   setPrjModel: (v) => setState((s) => ({ prj: { ...s.prj, ...v } }), { persist: true }),

@@ -16,7 +16,8 @@ import { generateImage as defaultGenerate, durable, regenFor } from '@lib/images
 
 const ENHANCER_SYSTEM = `You are a world-class prompt engineer for AI image generation.
 Rewrite the user's idea into ONE rich image prompt: subject with specifics, action/pose, environment, lighting, color mood, composition, art style or camera lens, quality descriptors.
-Keep every concrete detail the user asked for. 40-90 words. Output ONLY the prompt — no preamble, no quotes, no lists.`;
+Keep every concrete detail the user asked for. 40-90 words. Output ONLY the prompt — no preamble, no quotes, no lists.
+If the idea refers to an earlier image in the conversation ("another one", "same but red", "make it night"), treat it as a FOLLOW-UP: keep the previous image's subject and style, apply only the requested change.`;
 
 // ── 1 · Websearcher ──────────────────────────────────────────────────────────
 async function defaultSearch(prompt, { signal } = {}) {
@@ -181,6 +182,8 @@ export async function runImagePipeline({
   apiKey,
   signal,
   web = true,
+  memory = [], // [{prompt, enhanced}] — earlier images in this conversation
+  fallbacks = [], // forced-cascade: [{provider, model}] tried after the primary dies
   onStage = () => {},
   search = defaultSearch,
   complete = defaultComplete,
@@ -214,9 +217,17 @@ export async function runImagePipeline({
   let enhancedPrompt = '';
   let enhancedBy = 'none';
   try {
+    const mem = (memory || [])
+      .filter((m) => m && (m.prompt || m.enhanced))
+      .slice(-3)
+      .map((m, i) => `${i + 1}. "${String(m.prompt || '').slice(0, 120)}" → generated as: ${String(m.enhanced || '').slice(0, 220)}`)
+      .join('\n');
     const raw = await complete({
       system: ENHANCER_SYSTEM,
-      user: `User's idea: ${String(prompt).slice(0, 600)}${facts ? `\n\nVisual facts from the web:\n${facts}` : ''}`,
+      user:
+        `User's idea: ${String(prompt).slice(0, 600)}` +
+        (mem ? `\n\nEarlier images in this conversation:\n${mem}` : '') +
+        (facts ? `\n\nVisual facts from the web:\n${facts}` : ''),
       signal,
     });
     const cleaned = cleanEnhanced(raw, prompt);
@@ -241,16 +252,26 @@ export async function runImagePipeline({
   for (let i = 0; i < n; i++) {
     guard();
     stage('generate', 'run', `image ${i + 1}/${n}`);
+    // FORCED CALL — primary first, then every fallback until one produces
+    const chain = [{ provider, model }, ...(provider === 'pollinations' ? [] : fallbacks)];
     let img = null;
-    try {
-      img = await generate({ prompt: finalPrompt, provider, model, aspect, apiKey, signal, i });
-    } catch (e) {
-      if (e?.name === 'AbortError' || e === 'aborted') throw e;
-      stage('generate', 'fail', e?.message || 'generation failed');
-      warns.push(`image ${i + 1}: ${e?.message || 'generation failed'}`);
+    let lastGenErr = null;
+    for (const c of chain) {
+      try {
+        img = await generate({ prompt: finalPrompt, provider: c.provider, model: c.model, aspect, apiKey, signal, i });
+        break;
+      } catch (e) {
+        if (e?.name === 'AbortError' || e === 'aborted') throw e;
+        lastGenErr = e;
+        if (chain.indexOf(c) < chain.length - 1) stage('generate', 'fail', `${c.provider}/${c.model} failed — forcing next`);
+      }
+    }
+    if (!img) {
+      stage('generate', 'fail', lastGenErr?.message || 'generation failed');
+      warns.push(`image ${i + 1}: ${lastGenErr?.message || 'generation failed'}`);
       continue;
     }
-    stage('generate', 'done', `image ${i + 1}/${n}`);
+    stage('generate', 'done', `image ${i + 1}/${n}${img.provider !== provider ? ` · forced via ${img.provider}` : ''}`);
 
     guard();
     stage('upscale', 'run', 'unsharp mask');

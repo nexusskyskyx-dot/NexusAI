@@ -289,6 +289,50 @@ export async function completeChat(opts) {
   throw lastErr;
 }
 
+
+// ── FORCED CALL (v1.17) — the answer always arrives ───────────────────────────
+// Try the primary model; if it fails before producing anything, force the next
+// candidate, and the next — through the entire pool. A candidate that already
+// streamed partial text is kept (never restart a working stream). Returns
+// { provider, model, text, reasoning, fallbackFrom } — fallbackFrom is set when
+// the answer came from a forced fallback so the UI can credit it.
+export async function forcedStreamChat(candidates, opts, stream = streamChat) {
+  const seen = new Set();
+  const queue = [];
+  for (const c of candidates) {
+    const k = c.provider + '/' + c.model;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    queue.push(c);
+  }
+  let lastErr = null;
+  let fallbackFrom = null;
+  for (let i = 0; i < queue.length; i++) {
+    const c = queue[i];
+    let text = '';
+    let reasoning = '';
+    try {
+      const r = await stream({ ...opts, provider: c.provider, model: c.model, onDelta: (d) => { text += d; opts.onDelta?.(d); }, onReasoning: (d) => { reasoning += d; opts.onReasoning?.(d); } });
+      return {
+        provider: c.provider,
+        model: c.model,
+        text: r?.text || text,
+        reasoning: r?.reasoning || reasoning,
+        fallbackFrom,
+      };
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      lastErr = e;
+      if (text) {
+        // partial answer already streamed to the user — keep it, don't restart
+        return { provider: c.provider, model: c.model, text, reasoning, fallbackFrom, partial: true };
+      }
+      if (i === 0) fallbackFrom = c.provider;
+    }
+  }
+  throw lastErr || new Error('every model failed');
+}
+
 export function friendlyError(e) {
   if (e instanceof ApiError) return e.message;
   return e?.message || 'Unexpected error';
