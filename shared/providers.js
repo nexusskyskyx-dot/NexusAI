@@ -373,7 +373,7 @@ export const IMAGE_PROVIDERS = [
   {
     id: 'gemini-image',
     name: 'Gemini Image',
-    vendor: 'Free tier · Gemini key',
+    vendor: 'Nano Banana 2 · Gemini key',
     kind: 'gemini-image',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
     needsKey: true,
@@ -383,8 +383,9 @@ export const IMAGE_PROVIDERS = [
     direct: true,
     note: 'Google’s native image generation (nano-banana class) — strong prompt following and text-in-image, free tier with your Google AI Studio key. Called straight from your browser.',
     models: [
-      { id: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Image', tags: ['FREE', 'BEST'] },
-      { id: 'gemini-2.0-flash-preview-image-generation', label: 'Gemini 2.0 Flash Image', tags: ['FREE', 'FAST'] },
+      { id: 'gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image', tags: ['FREE', 'BEST'] },
+      { id: 'gemini-3.1-flash-lite-image', label: 'Gemini 3.1 Flash Lite', tags: ['FREE', 'FAST'] },
+      { id: 'gemini-3-pro-image', label: 'Gemini 3 Pro Image', tags: ['PAID', 'PRO'] },
     ],
   },
   {

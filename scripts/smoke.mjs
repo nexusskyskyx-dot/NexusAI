@@ -1080,7 +1080,7 @@ function modelLabelSafeguard(p, m) {
   const htmlDone24 = renderToString(React11.createElement(Message24, { msg: msgDone24, isLast: false }));
   if (!/Drew 1 image/.test(htmlDone24) || !/Previewed — 1\/1 PASS/.test(htmlDone24)) throw new Error('fold heads missing');
   const { imageModelLabel: lbl24 } = await import('../src/lib/images.js');
-  if (lbl24('black-forest-labs/flux.1-schnell') !== 'FLUX schnell' || lbl24('gemini-2.5-flash-image') !== 'Gemini 2.5 Flash Image' || lbl24('unknown-model-x') !== 'unknown-model-x') throw new Error('image model labels wrong');
+  if (lbl24('black-forest-labs/flux.1-schnell') !== 'FLUX schnell' || lbl24('gemini-3.1-flash-image') !== 'Gemini 3.1 Flash Image' || lbl24('unknown-model-x') !== 'unknown-model-x') throw new Error('image model labels wrong');
   const src24 = (await import('node:fs')).readFileSync(new URL('../src/components/Message.jsx', import.meta.url), 'utf8');
   if (!/stood in for/.test(src24) || !src24.includes('fellBack')) throw new Error('fallback credit wiring missing from the fold body');
 
@@ -1095,19 +1095,20 @@ function modelLabelSafeguard(p, m) {
     geminiReq24 = { url, opts };
     return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aW1n' } }] } }] }) };
   };
-  const g24 = await gi24({ provider: 'gemini-image', model: 'gemini-2.5-flash-image', prompt: 'a tesla logo', aspect: '16:9', w: 1280, h: 720, apiKey: 'AIza-test' });
+  const g24 = await gi24({ provider: 'gemini-image', model: 'gemini-3.1-flash-image', prompt: 'a tesla logo', aspect: '16:9', w: 1280, h: 720, apiKey: 'AIza-test' });
   globalThis.fetch = realFetch24;
   if (!g24.src.startsWith('data:image/png;base64,')) throw new Error('gemini image src wrong');
-  if (!geminiReq24.url.includes('gemini-2.5-flash-image:generateContent')) throw new Error('gemini url wrong');
+  if (!geminiReq24.url.includes('gemini-3.1-flash-image:generateContent')) throw new Error('gemini url wrong');
   if (geminiReq24.opts.headers['x-goog-api-key'] !== 'AIza-test') throw new Error('gemini key header wrong');
   const body24 = JSON.parse(geminiReq24.opts.body);
   if (!body24.generationConfig.responseModalities.includes('IMAGE')) throw new Error('responseModalities missing');
-  if (!/aspect ratio 16:9/.test(body24.contents[0].parts[0].text)) throw new Error('aspect hint missing');
+  if (body24.generationConfig.imageConfig?.aspectRatio !== '3:2') throw new Error('native aspect config missing (16:9 → 3:2)');
+  if (g24.fellBack) throw new Error('no fallback should happen when the model answers');
 
   // ── autobest: gemini key promotes images to Gemini 2.5 Flash Image
   const st24 = { keys: { gemini: 'AIza-x' }, envKeys: [], solo: {}, squad: { workers: [], planner: {}, critic: {}, synth: {} }, prj: {}, image: { provider: 'nexus-engine', model: 'black-forest-labs/flux.2-pro' } };
   const img24 = ac24(st24).image;
-  if (img24.provider !== 'gemini-image' || img24.model !== 'gemini-2.5-flash-image') throw new Error('gemini image promotion missing: ' + JSON.stringify(img24));
+  if (img24.provider !== 'gemini-image' || img24.model !== 'gemini-3.1-flash-image') throw new Error('gemini image promotion missing: ' + JSON.stringify(img24));
   // no keys at all → engine default stays
   const img24b = ac24({ keys: {}, envKeys: [], solo: {}, squad: { workers: [], planner: {}, critic: {}, synth: {} }, prj: {}, image: { provider: 'pollinations', model: 'flux' } }).image;
   if (img24b.provider !== 'nexus-engine') throw new Error('no-key default should be engine');
@@ -1120,6 +1121,48 @@ function modelLabelSafeguard(p, m) {
   const rj24 = await rr24.json();
   if (!rj24.ok || rj24.requested !== 'black-forest-labs/flux.2-pro' || typeof rj24.fellBack !== 'boolean') throw new Error('engine fallback truth missing from route');
   console.log(`[24] image fixes — exactly one loader ✓ · honest fallback credit ✓ · gemini image transport ✓ (key guard, headers, modalities, aspect hint) · autobest gemini promotion ✓ · engine fallback truth ✓`);
+}
+
+// 25 · gemini retirement self-heal — a dead model ID must not cost the image
+{
+  const { generateImage: gi25 } = await import('../src/lib/images.js');
+  const { IMAGE_PROVIDERS: IP25 } = await import('../shared/providers.js');
+
+  // the registry no longer lists retired models
+  const g25 = IP25.find((p) => p.id === 'gemini-image');
+  if (g25.models.some((m) => /2\.5-flash-image$|2\.0-flash-preview/.test(m.id))) throw new Error('retired gemini model still listed');
+  if (!g25.models.some((m) => m.id === 'gemini-3.1-flash-image')) throw new Error('live model missing');
+
+  // 404 on the picked model → walks the family ladder → lite answers, honestly
+  const calls25 = [];
+  const realFetch25 = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    calls25.push(String(url));
+    if (url.includes('gemini-3.1-flash-image:')) return { status: 404, ok: false, json: async () => ({}) };
+    if (url.includes('gemini-3.1-flash-lite-image:'))
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aW1n' } }] } }] }) };
+    return { status: 404, ok: false, json: async () => ({}) };
+  };
+  const h25 = await gi25({ provider: 'gemini-image', model: 'gemini-3.1-flash-image', prompt: 'a dragon', aspect: '1:1', apiKey: 'AIza-x' });
+  globalThis.fetch = realFetch25;
+  if (h25.model !== 'gemini-3.1-flash-lite-image') throw new Error('heal did not walk to lite: ' + h25.model);
+  if (!h25.fellBack || h25.requestedModel !== 'gemini-3.1-flash-image') throw new Error('heal not honest about the fallback');
+  if (calls25.length !== 2) throw new Error('heal made wrong number of calls: ' + calls25.length);
+
+  // a 401 (bad key) must NOT trigger model-walking — it fails fast with the message
+  globalThis.fetch = async () => ({ status: 401, ok: false, json: async () => ({ error: { message: 'API key not valid' } }) });
+  let e25 = '';
+  try { await gi25({ provider: 'gemini-image', model: 'gemini-3.1-flash-image', prompt: 'x', apiKey: 'bad' }); } catch (err) { e25 = err.message; }
+  globalThis.fetch = realFetch25;
+  if (!/API key not valid/.test(e25)) throw new Error('401 should fail fast with the provider message: ' + e25);
+
+  // every model retired → clear error naming the models tried
+  globalThis.fetch = async () => ({ status: 404, ok: false, json: async () => ({}) });
+  let e25b = '';
+  try { await gi25({ provider: 'gemini-image', model: 'gemini-3.1-flash-image', prompt: 'x', apiKey: 'AIza-x' }); } catch (err) { e25b = err.message; }
+  globalThis.fetch = realFetch25;
+  if (!/404/.test(e25b) || !/gemini-3/.test(e25b)) throw new Error('all-retired error unclear: ' + e25b);
+  console.log('[25] gemini self-heal — retired model 404 → lite ✓ honest ✓ · 401 fails fast ✓ · all-retired names the models ✓ · registry on live IDs ✓');
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');

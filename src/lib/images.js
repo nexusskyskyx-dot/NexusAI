@@ -72,28 +72,48 @@ export async function generateImage({ provider, model, prompt, w = 1024, h = 102
   }
 
   if (reg.kind === 'gemini-image') {
-    // native Gemini image generation — free tier with an AI Studio key
+    // native Gemini image generation (Nano Banana family) with an AI Studio key.
+    // Self-healing: Google retires image models regularly (gemini-2.5-flash-image
+    // died Oct 2026) — on a 404 we walk the provider's model list until one answers.
     const key = apiKey || '';
     if (!key) throw new Error('Gemini Image needs a Google AI Studio key (free) — add it in Keys');
-    const aspectHint = aspect && aspect !== '1:1' ? ` (aspect ratio ${aspect})` : '';
-    const r = await fetch(`${reg.baseUrl}/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: String(prompt).slice(0, 1800) + aspectHint }] }],
-        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-      }),
-      signal,
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j?.error?.message || `Gemini Image error (HTTP ${r.status})`);
-    const part = (j?.candidates?.[0]?.content?.parts || []).find((x) => x?.inlineData?.data);
-    if (!part) throw new Error(j?.candidates?.[0]?.content?.parts?.[0]?.text || 'Gemini returned no image (safety filter or quota?)');
-    const a = IMAGE_ASPECTS.find((x) => x.id === aspect) || IMAGE_ASPECTS[0];
-    return {
-      src: `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`,
-      w: a.w, h: a.h, seed, model, provider, prompt, remote: false,
-    };
+    // Gemini-supported aspect ratios; our 16:9/9:16 map to the closest natives
+    const ASPECT_MAP = { '1:1': '1:1', '16:9': '3:2', '9:16': '2:3' };
+    const ladder = [model, ...(reg.models || []).map((m) => m.id).filter((m) => m !== model)];
+    const wanted = model;
+    let lastErr = null;
+    for (const m of ladder) {
+      const r = await fetch(`${reg.baseUrl}/${m}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: String(prompt).slice(0, 1800) }] }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+            ...(ASPECT_MAP[aspect] ? { imageConfig: { aspectRatio: ASPECT_MAP[aspect] } } : {}),
+          },
+        }),
+        signal,
+      }).catch((e) => {
+        if (e?.name === 'AbortError') throw e;
+        throw new Error(`Gemini Image unreachable (${e?.message || 'network'})`);
+      });
+      if (r.status === 404) {
+        lastErr = new Error(`${m} is not available (HTTP 404 — retired or unknown model)`);
+        continue; // try the next model in the family
+      }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.message || `Gemini Image error (HTTP ${r.status})`);
+      const part = (j?.candidates?.[0]?.content?.parts || []).find((x) => x?.inlineData?.data);
+      if (!part) throw new Error(j?.candidates?.[0]?.content?.parts?.[0]?.text || 'Gemini returned no image (safety filter or quota?)');
+      const a = IMAGE_ASPECTS.find((x) => x.id === aspect) || IMAGE_ASPECTS[0];
+      return {
+        src: `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`,
+        w: a.w, h: a.h, seed, model: m, provider, prompt, remote: false,
+        requestedModel: wanted, fellBack: m !== wanted,
+      };
+    }
+    throw lastErr || new Error('Gemini Image: no available model');
   }
 
   if (reg.kind === 'server-image') {

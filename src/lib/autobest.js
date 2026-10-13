@@ -117,13 +117,13 @@ export function autoConfigure(s) {
     image = { ...image, provider: 'openai-images', model: 'dall-e-3' };
     changes.push('Images → DALL·E 3');
   } else if (!wantsOpenAI && wantsGemini && (onDefault || image.provider === 'openai-images')) {
-    image = { ...image, provider: 'gemini-image', model: 'gemini-2.5-flash-image' };
+    image = { ...image, provider: 'gemini-image', model: 'gemini-3.1-flash-image' };
     changes.push('Images → Gemini 2.5 Flash Image');
   } else if (!wantsOpenAI && !wantsGemini && image.provider === 'openai-images') {
     image = { ...image, provider: 'nexus-engine', model: 'black-forest-labs/flux.2-pro' };
     changes.push('Images → FLUX 2 Pro (engine)');
   } else if (onDefault) {
-    image = { ...image, provider: wantsGemini ? 'gemini-image' : 'nexus-engine', model: wantsGemini ? 'gemini-2.5-flash-image' : 'black-forest-labs/flux.2-pro' };
+    image = { ...image, provider: wantsGemini ? 'gemini-image' : 'nexus-engine', model: wantsGemini ? 'gemini-3.1-flash-image' : 'black-forest-labs/flux.2-pro' };
   }
 
   return { solo, squad, prj, image, changes };
