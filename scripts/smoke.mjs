@@ -1381,7 +1381,7 @@ function modelLabelSafeguard(p, m) {
   const fakeFetch31 = async (url, opts) => {
     if (!/api\.xkiro\.com\/v1\/models/.test(url)) throw new Error('unexpected url: ' + url);
     if (opts?.headers?.Authorization !== 'Bearer xk_live_test_0123456789abcd') throw new Error('auth header missing/wrong');
-    return { json: async () => ({ data: [
+    return { ok: true, json: async () => ({ data: [
       { id: 'mistralai/mistral-large-4-0' },
       { id: 'cohere/command-a-plus' },
       { id: 'deepseek/deepseek-v4-pro-0813' },
@@ -1410,11 +1410,63 @@ function modelLabelSafeguard(p, m) {
   if (pinged31 !== 'mistralai/mistral-large-4-0') throw new Error('ping target wrong: ' + pinged31);
 
   // a failing catalog fetch must be a silent no-op (static catalog survives)
-  await sync31(async () => { throw new Error('network down'); });
+  await sync31(async () => { throw new Error('network down'); }); // throw path — no ok check involved
   renderToString(React11.createElement(() => { live31 = useStore11().liveModels.xkiro; return ''; }));
   if (!live31 || !live31.length) throw new Error('failed sync wiped the catalog');
   A11.removeKey('xkiro');
   console.log('[31] xKiro live sync — callable-only catalog ✓ · no silent remap to paid twins ✓ · ping uses live model ✓ · network-fail safe ✓');
+}
+
+// 32 · never-give-up failover — pool always has keyless lanes, 404 twin retry
+{
+  const { buildPool: pool32 } = await import('../src/store.js');
+  const { streamChat: sc32, forcedStreamChat: forced32 } = await import('../src/lib/ai.js');
+  const { fetchLiveXKiro: sync32 } = await import('../src/store.js');
+
+  // 1 · with ZERO keys the pool must still contain the keyless lanes
+  const pool032 = pool32();
+  const provs32 = new Set(pool032.map((c) => c.provider));
+  if (!provs32.has('pollinations')) throw new Error('keyless pollinations missing from failover pool');
+  if (!provs32.has('demo')) throw new Error('offline demo missing from failover pool');
+  if (provs32.has('groq') || provs32.has('xkiro') || provs32.has('github')) throw new Error('keyed provider leaked into pool without a key');
+
+  // 2 · 404 → retry the ':free' twin id before failing over
+  const realFetch32 = globalThis.fetch;
+  const calls32 = [];
+  globalThis.fetch = async (url, opts) => {
+    calls32.push({ url: String(url), model: JSON.parse(opts.body).model });
+    if (calls32.length === 1)
+      return new Response(JSON.stringify({ error: { message: 'Model not found' } }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    return new Response('data: {"choices":[{"delta":{"content":"alt ok"}}]}\n\ndata: [DONE]\n\n', { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  };
+  let r32;
+  try {
+    r32 = await sc32({ provider: 'xkiro', model: 'mistralai/mistral-large-4-0', messages: [{ role: 'user', content: 'hi' }], apiKey: 'xk_404test_0123456789', onDelta: () => {}, transport: 'direct' });
+  } finally {
+    globalThis.fetch = realFetch32;
+  }
+  if (r32?.text !== 'alt ok') throw new Error('twin-id retry did not answer: ' + JSON.stringify(r32));
+  if (calls32.length !== 2 || calls32[1].model !== 'mistralai/mistral-large-4-0:free') throw new Error('twin id not retried: ' + JSON.stringify(calls32.map((c) => c.model)));
+
+  // 3 · every-lane-failed error must name each attempt (truth, not last-error)
+  let err32 = null;
+  try {
+    await forced32([{ provider: 'demo', model: 'nexus-demo' }, { provider: 'pollinations', model: 'openai' }], {}, async (o) => { throw new Error('lane down ' + o.model); });
+  } catch (e) { err32 = e; }
+  if (!err32 || !/Every lane failed/.test(err32.message)) throw new Error('summary error missing: ' + err32?.message);
+  if (!/demo\/nexus-demo/.test(err32.message) || !/pollinations\/openai/.test(err32.message)) throw new Error('summary must list every attempted lane');
+  if (!/lane down/.test(err32.message)) throw new Error('summary must carry the failure reasons');
+
+  // 4 · a failing live-sync endpoint is a no-op (existing catalog survives)
+  A11.setKeys({ xkiro: 'xk_sync404_0123456789abcd' });
+  let before32 = null;
+  renderToString(React11.createElement(() => { before32 = (useStore11().liveModels.xkiro || []).map((m) => m.id).join(','); return ''; }));
+  await sync32(async () => new Response('nope', { status: 404 }));
+  let lm32 = null;
+  renderToString(React11.createElement(() => { lm32 = (useStore11().liveModels.xkiro || []).map((m) => m.id).join(','); return ''; }));
+  if (lm32 !== before32) throw new Error('a 404 catalog endpoint must leave the catalog untouched');
+  A11.removeKey('xkiro');
+  console.log('[32] failover pool always has keyless lanes ✓ · 404 → :free twin retry ✓ · truthful every-lane-failed summary ✓ · sync 404 is a no-op ✓');
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');

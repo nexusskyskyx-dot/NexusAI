@@ -152,7 +152,11 @@ export function buildPool(s = state) {
   const seen = new Set();
   const add = (provider, model) => {
     const k = provider + '/' + model;
-    if (seen.has(k) || !getModel(provider, model) || !hasCredential(provider, s)) return;
+    const p = getProvider(provider);
+    // v1.22.3: keyless providers (Pollinations, Demo) are ALWAYS runnable —
+    // hasCredential() is false for them (no key exists), which silently
+    // emptied the failover pool and let chats die with "HTTP 404"
+    if (seen.has(k) || !getModel(provider, model) || (p?.needsKey && !hasCredential(provider, s))) return;
     seen.add(k);
     pool.push({ provider, model });
   };
@@ -233,6 +237,7 @@ export async function fetchLiveOpenRouter() {
     const t = setTimeout(() => ctl.abort(), 7000);
     const r = await fetch('https://openrouter.ai/api/v1/models', { signal: ctl.signal });
     clearTimeout(t);
+    if (!r.ok) return; // endpoint moved or key rejected — keep the static catalog
     const j = await r.json();
     const list = Array.isArray(j?.data) ? j.data : [];
     if (!list.length) return;
@@ -270,6 +275,7 @@ export async function fetchLiveXKiro(fetchImpl = (typeof fetch === 'function' ? 
       headers: { Authorization: `Bearer ${key}` },
     });
     clearTimeout(t);
+    if (!r.ok) return; // endpoint moved or key rejected — keep the static catalog
     const j = await r.json();
     const live = Array.isArray(j?.data) ? j.data.map((m) => m?.id).filter(Boolean) : [];
     if (!live.length) return;

@@ -299,6 +299,10 @@ export const PROVIDERS = [
     zeroCredit: true, // the models below are verified $0/token on xKiro
     note: 'One key, 129 models — 55 completely free ($0/token): Mistral Large 4, the newest Qwen3.x Max/Flash/Coder family, Cohere Command A+, North Mini Code, LongCat and more. PAID-tagged models (DeepSeek V4, GPT-5.6 Luna, Kimi K2.8…) spend your xKiro token balance — your call. NexusAI live-syncs the catalog, so a model your key cannot call never appears in the picker.',
     headers: (key) => ({ Authorization: `Bearer ${key}` }),
+    // gateways sometimes serve the free variant under a ':free'-suffixed id
+    // while the catalog lists the bare id (or vice versa) — on a 404 the
+    // transport retries the twin id before failing over
+    altIds: (id) => (id.endsWith(':free') ? [id.replace(/:free$/, '')] : [`${id}:free`]),
     models: [
       { id: 'mistralai/mistral-large-4-0', label: 'Mistral Large 4', tags: ['FREE', 'SMART'] },
       { id: 'qwen/qwen3.8-max:free', label: 'Qwen3.8 Max', tags: ['FREE', 'SMART'] },

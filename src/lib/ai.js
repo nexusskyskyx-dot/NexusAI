@@ -195,8 +195,6 @@ export async function streamChat(opts) {
   if (!provider) throw new ApiError(`Unknown provider "${opts.provider}"`, { provider: opts.provider });
   const kind = provider.kind;
   const stream = opts.onDelta ? true : !!opts.stream;
-  const body = buildBody(kind, { ...opts, stream: true });
-  body.__apiKey = opts.apiKey || '';
 
   const mode = opts.transport || 'auto';
   const canDirect = provider.direct && provider.kind !== 'demo';
@@ -205,6 +203,12 @@ export async function streamChat(opts) {
   else if (mode === 'proxy') order = ['proxy'];
   else order = canDirect ? ['direct', 'proxy'] : ['proxy'];
 
+  // v1.22.3: some gateways serve a model under a twin id (':free'-suffixed
+  // vs bare) while their catalog lists the other — on a 404, retry the twin
+  // before giving the slot up to failover.
+  const idVariants = [opts.model, ...(provider.altIds ? provider.altIds(opts.model) : [])];
+
+  const tryTransports = async (body) => {
   let lastErr = null;
   for (let t = 0; t < order.length; t++) {
     const transport = order[t];
@@ -259,6 +263,22 @@ export async function streamChat(opts) {
     return { text, reasoning };
   }
   throw lastErr || new ApiError('All transports failed', { provider: provider.id });
+  };
+
+  let lastErr = null;
+  for (const mid of idVariants) {
+    const body = buildBody(kind, { ...opts, model: mid, stream: true });
+    body.__apiKey = opts.apiKey || '';
+    try {
+      return await tryTransports(body);
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      lastErr = e;
+      if (e?.status === 404 && provider.altIds) continue; // try the twin id
+      throw e;
+    }
+  }
+  throw lastErr || new ApiError('All transports failed', { provider: provider.id });
 }
 
 // completeChat(...) → full text, no streaming (used for key tests etc.)
@@ -307,6 +327,7 @@ export async function forcedStreamChat(candidates, opts, stream = streamChat) {
   }
   let lastErr = null;
   let fallbackFrom = null;
+  const fails = [];
   for (let i = 0; i < queue.length; i++) {
     const c = queue[i];
     let text = '';
@@ -323,6 +344,7 @@ export async function forcedStreamChat(candidates, opts, stream = streamChat) {
     } catch (e) {
       if (e?.name === 'AbortError') throw e;
       lastErr = e;
+      fails.push(`${c.provider}/${c.model}: ${e?.message || 'failed'}`);
       if (text) {
         // partial answer already streamed to the user — keep it, don't restart
         return { provider: c.provider, model: c.model, text, reasoning, fallbackFrom, partial: true };
@@ -330,7 +352,12 @@ export async function forcedStreamChat(candidates, opts, stream = streamChat) {
       if (i === 0) fallbackFrom = c.provider;
     }
   }
-  throw lastErr || new Error('every model failed');
+  // v1.22.3: the error must tell the truth — which lanes were tried and why
+  // each one failed — instead of surfacing only the last failure
+  throw new ApiError(
+    `Every lane failed — ${fails.join(' · ')}. Add a free key in Keys & Models (a Pollinations or Demo pick always works).`,
+    { status: lastErr?.status || 0, network: lastErr?.network || false, provider: lastErr?.provider || '' }
+  );
 }
 
 export function friendlyError(e) {
