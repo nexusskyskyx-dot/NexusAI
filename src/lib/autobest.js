@@ -116,10 +116,10 @@ export function autoConfigure(s) {
     image = { ...image, provider: 'openai-images', model: 'dall-e-3' };
     changes.push('Images → DALL·E 3');
   } else if (!wantsOpenAI && image.provider === 'openai-images') {
-    image = { ...image, provider: 'pollinations', model: 'flux' };
-    changes.push('Images → Flux (free)');
+    image = { ...image, provider: 'nexus-engine', model: 'black-forest-labs/flux.2-pro' };
+    changes.push('Images → FLUX 2 Pro (engine)');
   } else if (onDefault) {
-    image = { ...image, provider: 'pollinations', model: image.model || 'flux' };
+    image = { ...image, provider: 'nexus-engine', model: 'black-forest-labs/flux.2-pro' };
   }
 
   return { solo, squad, prj, image, changes };

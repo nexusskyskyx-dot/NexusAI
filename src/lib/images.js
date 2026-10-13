@@ -71,6 +71,19 @@ export async function generateImage({ provider, model, prompt, w = 1024, h = 102
     }
   }
 
+  if (reg.kind === 'server-image') {
+    // v1.20 · the NexusAI server engine — forced flagship escalation + cache
+    const r = await fetch(reg.baseUrl || '/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: String(prompt).slice(0, 900), model, w, h, seed }),
+      signal,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.ok || !j?.b64) throw new Error(j?.error || `NexusAI Engine error (HTTP ${r.status})`);
+    return { src: `data:${j.contentType || 'image/jpeg'};base64,${j.b64}`, w, h, seed, model: j.model, provider, prompt, remote: false };
+  }
+
   if (reg.kind === 'openai-images') {
     const sizes = OPENAI_SIZES[model] || OPENAI_SIZES['dall-e-3'];
     const size = sizes[aspectIndex(aspect)] || sizes[0];

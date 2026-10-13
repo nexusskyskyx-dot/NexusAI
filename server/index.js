@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { serializeProviders, PROVIDERS, IMAGE_PROVIDERS } from '../shared/providers.js';
 import { streamDemo, demoResponse } from './demo.js';
+import { generateImage as engineGenerate } from './imagegen.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -77,6 +78,20 @@ function htmlToText(html) {
     .replace(/\n\s*\n\s*\n+/g, '\n\n')
     .trim();
 }
+
+app.post('/api/generate', async (req, res) => {
+  const { prompt, model, w, h, seed } = req.body || {};
+  if (!String(prompt || '').trim()) return res.status(400).json({ ok: false, error: 'prompt required' });
+  try {
+    const out = await engineGenerate(
+      { prompt: String(prompt), model: model ? String(model) : undefined, w: Number(w) || 1024, h: Number(h) || 1024, seed: seed != null ? Number(seed) : Math.floor(Math.random() * 1e9) },
+      fetch
+    );
+    res.json({ ok: true, b64: out.b64, model: out.model, contentType: out.contentType, cached: out.cached });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e?.message || 'generation failed' });
+  }
+});
 
 app.get('/api/fetch', async (req, res) => {
   const url = String(req.query.url || '');

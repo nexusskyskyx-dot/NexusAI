@@ -352,6 +352,25 @@ export const PROVIDERS = [
 // keyRef: which chat provider's key to use (image registry shares credentials)
 export const IMAGE_PROVIDERS = [
   {
+    id: 'nexus-engine',
+    name: 'NexusAI Engine',
+    vendor: 'Free · flagship models',
+    kind: 'server-image',
+    baseUrl: '/api/generate',
+    needsKey: false,
+    keyRef: null,
+    keyUrl: 'https://pollinations.ai',
+    free: true,
+    direct: false,
+    note: 'The NexusAI server engine — FORCED escalation through flagship image models (FLUX 2 Pro → Gemini 3.1 Flash Image → FLUX schnell → Z-Image Turbo) via the free keyless relay, with an on-disk cache so repeats are instant. Runs through your own NexusAI server.',
+    models: [
+      { id: 'black-forest-labs/flux.2-pro', label: 'FLUX 2 Pro', tags: ['FREE', 'BEST'] },
+      { id: 'google/gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image', tags: ['FREE', 'FLAGSHIP'] },
+      { id: 'black-forest-labs/flux.1-schnell', label: 'FLUX schnell', tags: ['FREE', 'FAST'] },
+      { id: 'tongyi-mai/z-image-turbo', label: 'Z-Image Turbo', tags: ['FREE', 'FAST'] },
+    ],
+  },
+  {
     id: 'pollinations',
     name: 'Pollinations Image',
     vendor: 'Free · no key',

@@ -809,7 +809,7 @@ console.log(`[15] open air — input-first composer ✓ · one intent chip, zero
   const img19 = autoConfigure(st19d).image;
   if (img19.provider !== 'openai-images' || img19.model !== 'dall-e-3') throw new Error('image not upgraded to DALL·E: ' + JSON.stringify(img19));
   const img19b = autoConfigure({ ...st19d, keys: {}, image: img19 }).image;
-  if (img19b.provider !== 'pollinations' || img19b.model !== 'flux') throw new Error('image not remapped to free after key loss');
+  if (img19b.provider !== 'nexus-engine' || img19b.model !== 'black-forest-labs/flux.2-pro') throw new Error('image not remapped to engine after key loss: ' + JSON.stringify(img19b));
 
   // ── forced chat cascade: primary dies → next candidate answers, credited
   const attempts19 = [];
@@ -974,6 +974,80 @@ function modelLabelSafeguard(p, m) {
   const htmlS22 = renderToString(React11.createElement(Message22, { msg: msg22, isLast: false }));
   if (!/Thought for 5\.2s/.test(htmlS22)) throw new Error('solo thought-time badge missing');
   console.log('[22] main loader — 9 phase texts ✓ · hexagon+crossfade+sub ✓ · css (ftIn/ftOut/nxPulse/nxGlow/nxRing) ✓ · folds folded-by-default ✓ · solo thought badge ✓');
+}
+
+// 23 · image engine — flagship escalation, forced ladder, disk cache
+{
+  const engine23 = await import('../server/imagegen.js');
+  const { IMAGE_PROVIDERS: IP23 } = await import('../shared/providers.js');
+
+  // registry: engine is the first, keyless, flagship-flagged
+  const eng23 = IP23[0];
+  if (eng23.id !== 'nexus-engine' || eng23.needsKey || eng23.kind !== 'server-image') throw new Error('engine registry entry wrong');
+  if (!eng23.models.some((m) => m.id === 'black-forest-labs/flux.2-pro' && m.tags.includes('BEST'))) throw new Error('flagship model missing');
+
+  // buildUrl shape
+  const url23 = engine23.buildUrl({ prompt: 'a tesla logo', model: 'black-forest-labs/flux.2-pro', w: 1024, h: 768, seed: 42 });
+  if (!url23.startsWith('https://image.pollinations.ai/prompt/a%20tesla%20logo?') || !url23.includes('model=black-forest-labs%2Fflux.2-pro') || !url23.includes('seed=42')) throw new Error('engine url wrong: ' + url23);
+
+  // escalation: flagship 500s → gemini returns non-image → schnell succeeds
+  const png23 = Buffer.from('89504e470d0a1a0a' + 'ab'.repeat(2048), 'hex');
+  const seen23 = [];
+  const out23 = await engine23.generateImage({ prompt: 'escalation test', w: 512, h: 512, seed: 7 }, async (url) => {
+    seen23.push(url);
+    if (url.includes('flux.2-pro')) return { ok: false, status: 500 };
+    if (url.includes('gemini')) return { ok: true, status: 200, headers: { get: () => 'application/json' }, arrayBuffer: async () => new ArrayBuffer(10) };
+    return { ok: true, status: 200, headers: { get: () => 'image/png' }, arrayBuffer: async () => png23.buffer.slice(png23.byteOffset, png23.byteOffset + png23.length) };
+  });
+  if (out23.model !== 'black-forest-labs/flux.1-schnell' || out23.cached) throw new Error('escalation wrong: ' + JSON.stringify(out23.model));
+  if (seen23.length !== 3) throw new Error('ladder tried wrong number of models: ' + seen23.length);
+
+  // cache: the schnell result is now served from disk — no fetch for THAT rung
+  // (other rungs may probe their own caches and miss; that's the ladder)
+  const urls23b = [];
+  const out23b = await engine23.generateImage({ prompt: 'escalation test', w: 512, h: 512, seed: 7 }, async (url) => { urls23b.push(url); throw new Error('down'); });
+  if (!out23b.cached || out23b.model !== out23.model) throw new Error('disk cache miss');
+  if (urls23b.some((u) => u.includes('schnell'))) throw new Error('cached rung still hit the network');
+
+  // requested model goes first, then the ladder
+  const seen23c = [];
+  await engine23.generateImage({ prompt: 'custom first', model: 'x-ai/grok-imagine-image-2.0', w: 256, h: 256, seed: 9 }, async (url) => {
+    seen23c.push(url);
+    return { ok: true, status: 200, headers: { get: () => 'image/png' }, arrayBuffer: async () => png23.buffer.slice(png23.byteOffset, png23.byteOffset + png23.length) };
+  });
+  if (!seen23c[0].includes('grok-imagine')) throw new Error('custom model not tried first');
+
+  // all rungs fail → error names every model
+  let msg23 = '';
+  try { await engine23.generateImage({ prompt: 'doomed', w: 64, h: 64, seed: 1 }, async () => ({ ok: false, status: 429 })); } catch (e) { msg23 = e.message; }
+  if (!/flux\.2-pro.*gemini.*schnell.*z-image/s.test(msg23)) throw new Error('failure message missing ladder: ' + msg23);
+
+  // client transport: server-image kind → data URL
+  const realFetch23 = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('/api/generate')) {
+      const body23 = JSON.parse(opts.body);
+      if (!body23.prompt || !body23.model) throw new Error('engine call missing params');
+      return { ok: true, json: async () => ({ ok: true, b64: 'aW1n', model: body23.model, contentType: 'image/png', cached: true }) };
+    }
+    return realFetch23(url, opts);
+  };
+  const { generateImage: gi23 } = await import('../src/lib/images.js');
+  const img23 = await gi23({ provider: 'nexus-engine', model: 'black-forest-labs/flux.2-pro', prompt: 'a tesla logo', w: 1024, h: 1024, aspect: '1:1' });
+  globalThis.fetch = realFetch23;
+  if (!img23.src.startsWith('data:image/png;base64,') || img23.model !== 'black-forest-labs/flux.2-pro' || img23.provider !== 'nexus-engine') throw new Error('client engine transport wrong');
+
+  // live route on the running server: seed the cache, then POST — must answer from cache
+  engine23.cachePut({ prompt: 'cached route test', model: 'black-forest-labs/flux.2-pro', w: 300, h: 300, seed: 55 }, png23, 'image/png', 'black-forest-labs/flux.2-pro');
+  const rr23 = await realFetch23('http://localhost:8787/api/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: 'cached route test', model: 'black-forest-labs/flux.2-pro', w: 300, h: 300, seed: 55 }),
+  });
+  const rj23 = await rr23.json();
+  if (!rr23.ok || !rj23.ok || !rj23.cached || rj23.model !== 'black-forest-labs/flux.2-pro') throw new Error('live /api/generate cache route wrong: ' + JSON.stringify(rj23));
+  const r40023 = await realFetch23('http://localhost:8787/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+  if (r40023.status !== 400) throw new Error('empty prompt should 400');
+  console.log(`[23] image engine — flagship ladder ✓ (3 rungs walked) · disk cache hit, zero network ✓ · custom-model-first ✓ · all-fail lists every rung ✓ · client transport ✓ · live /api/generate cached ✓`);
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');
