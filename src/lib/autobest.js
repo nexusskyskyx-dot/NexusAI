@@ -27,7 +27,7 @@ const hasCredential = (pid, s) => {
 // chat, code-tuned models for coding slots.
 const LADDERS = {
   chat: [
-    ['gemini', 'gemini-2.5-flash'],
+    ['gemini', 'gemini-3-flash'],
     ['openrouter', 'deepseek/deepseek-chat-v3-0324:free'],
     ['groq', 'llama-3.3-70b-versatile'],
     ['github', 'openai/gpt-4o'],
@@ -53,12 +53,12 @@ const LADDERS = {
     ['openrouter', 'deepseek/deepseek-chat-v3-0324:free'],
     ['deepseek', 'deepseek-chat'],
     ['qwen', 'qwen3-coder-plus'],
-    ['gemini', 'gemini-2.5-flash'],
+    ['gemini', 'gemini-3-flash'],
     ['openai', 'gpt-4o-mini'],
     ['pollinations', 'qwen-coder'],
   ],
   plan: [
-    ['gemini', 'gemini-2.5-flash'],
+    ['gemini', 'gemini-3-flash'],
     ['groq', 'llama-3.3-70b-versatile'],
     ['openrouter', 'deepseek/deepseek-chat-v3-0324:free'],
     ['github', 'openai/gpt-4o-mini'],

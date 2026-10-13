@@ -1207,4 +1207,38 @@ function modelLabelSafeguard(p, m) {
   console.log('[26] redesign — blue accent + OLED surfaces ✓ · Inter bold (900) ✓ · default+migration ✓ · canvas fully removed ✓ · BrandLogo override ✓');
 }
 
+// 27 · free-tier truth — current models only, no dead free claims
+{
+  const { PROVIDERS: P27, getProvider: gp27 } = await import('../shared/providers.js');
+  const { autoConfigure: ac27 } = await import('../src/lib/autobest.js');
+
+  // Gemini: current free models, retired/closed ones gone
+  const gem27 = gp27('gemini');
+  const gids27 = gem27.models.map((m) => m.id);
+  if (!gids27.includes('gemini-3-flash') || !gids27.includes('gemini-3.1-flash-lite')) throw new Error('current Gemini free models missing');
+  if (gids27.includes('gemini-2.0-flash') || gids27.includes('gemini-2.5-pro')) throw new Error('retired/closed Gemini models still listed');
+  if (!gem27.models.find((m) => m.id === 'gemini-3-flash').tags.includes('SMART')) throw new Error('gemini-3-flash not flagged SMART');
+
+  // Cerebras: free tier ended — must not claim FREE anywhere
+  const cb27 = gp27('cerebras');
+  if (cb27.free !== false || !/Paid/.test(cb27.vendor)) throw new Error('cerebras still advertised as free');
+  if (cb27.models.some((m) => (m.tags || []).includes('FREE'))) throw new Error('cerebras models still tagged FREE');
+
+  // OpenRouter: honest quota in the note
+  if (!/50 requests\/day/.test(gp27('openrouter').note) || !/1,000\/day/.test(gp27('openrouter').note)) throw new Error('openrouter quota truth missing');
+
+  // auto-best with ONLY a gemini key picks gemini-3-flash
+  const st27 = { keys: { gemini: 'AIza-x' }, envKeys: [], solo: { provider: 'pollinations', model: 'openai' }, squad: { workers: [{ provider: 'pollinations', model: 'qwen-coder' }], planner: { provider: 'pollinations', model: 'mistral' }, critic: { provider: 'pollinations', model: 'mistral' }, synth: { provider: 'pollinations', model: 'openai' } }, prj: { provider: 'pollinations', model: 'qwen-coder' }, image: {} };
+  const cfg27 = ac27(st27);
+  if (cfg27.solo.provider !== 'gemini' || cfg27.solo.model !== 'gemini-3-flash') throw new Error('gemini key does not promote to gemini-3-flash: ' + JSON.stringify(cfg27.solo));
+  if (cfg27.image.provider !== 'gemini-image') throw new Error('gemini key should also promote images');
+
+  // every provider still tagged free actually has a plausible free path
+  const free27 = P27.filter((p) => p.free && p.needsKey).map((p) => p.id);
+  for (const must of ['gemini', 'groq', 'github', 'mistral', 'zai', 'nvidia', 'cohere', 'huggingface', 'openrouter']) {
+    if (!free27.includes(must)) throw new Error('expected free provider missing from free set: ' + must);
+  }
+  console.log(`[27] free-tier truth — gemini-3-flash era ✓ · cerebras demoted (paid) ✓ · openrouter quota honest ✓ · gemini-key auto-best ✓ · free set: ${free27.length} providers ✓`);
+}
+
 console.log('\nALL SMOKE TESTS PASSED ⬡');
