@@ -44,7 +44,6 @@ export const PROVIDERS = [
     free: true,
     zeroCredit: true, // :free models bill $0.00 — the key is never charged
     direct: true,
-    free: true,
     note: 'One key, 400+ models. Free tier: ~25 :free models — 50 requests/day on an unfunded account, 1,000/day once you ever buy $10 of credits. Paid flagships (Claude / GPT-5 / Gemini / Grok) need credits. The free list auto-refreshes live.',
     liveCatalog: 'https://openrouter.ai/api/v1/models',
     headers: (key) => ({
@@ -298,7 +297,7 @@ export const PROVIDERS = [
     direct: true,
     free: true,
     zeroCredit: true, // the models below are verified $0/token on xKiro
-    note: 'A gateway with one key and 129 models — 55 of them completely free ($0/token, ~5M tokens/day): Mistral Large 4, the newest Qwen3.x Max/Flash/Coder family, Cohere Command A+ and North Mini Code, Meituan LongCat and more. Paid flagships (Claude, GPT-6, Gemini) also exist here — NexusAI only lists the verified-free ones.',
+    note: 'One key, 129 models — 55 completely free ($0/token): Mistral Large 4, the newest Qwen3.x Max/Flash/Coder family, Cohere Command A+, North Mini Code, LongCat and more. PAID-tagged models (DeepSeek V4, GPT-5.6 Luna, Kimi K2.8…) spend your xKiro token balance — your call. NexusAI live-syncs the catalog, so a model your key cannot call never appears in the picker.',
     headers: (key) => ({ Authorization: `Bearer ${key}` }),
     models: [
       { id: 'mistralai/mistral-large-4-0', label: 'Mistral Large 4', tags: ['FREE', 'SMART'] },
@@ -315,6 +314,13 @@ export const PROVIDERS = [
       { id: 'meta/muse-spark-1.3-contributor:free', label: 'Muse Spark 1.3', tags: ['FREE', 'VISION'] },
       { id: 'mistralai/mistral-small-2603', label: 'Mistral Small 4', tags: ['FREE', 'FAST'] },
       { id: 'stealth/space-bunny-alpha:free', label: 'Space Bunny Alpha', tags: ['FREE', 'VISION'] },
+      { id: 'deepseek/deepseek-v4-pro-0813', label: 'DeepSeek V4 Pro', tags: ['PAID', 'SMART'] },
+      { id: 'deepseek/deepseek-v4-flash-0731', label: 'DeepSeek V4 Flash', tags: ['PAID', 'FAST'] },
+      { id: 'openai/gpt-5.6-luna', label: 'GPT-5.6 Luna', tags: ['PAID', 'SMART'] },
+      { id: 'moonshotai/kimi-k2.8-preview-agent', label: 'Kimi K2.8 Agent', tags: ['PAID', 'SMART'] },
+      { id: 'z-ai/glm-5.3-flash', label: 'GLM-5.3 Flash', tags: ['PAID', '1M CTX'] },
+      { id: 'minimax/minimax-m2.7', label: 'MiniMax M2.7', tags: ['PAID'] },
+      { id: 'x-ai/grok-4.5', label: 'Grok 4.5', tags: ['PAID'] },
     ],
   },
   {

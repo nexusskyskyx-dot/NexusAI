@@ -252,6 +252,48 @@ export async function fetchLiveOpenRouter() {
   } catch {}
 }
 
+// xKiro (v1.22.2): the catalog moves fast and free-model availability can
+// differ per account/plan — a model the key cannot call must vanish from the
+// picker BEFORE a user ever hits "Model is not available". Pull the key's LIVE
+// model list and reconcile. Conservative by design: a curated model missing
+// from the live list is DROPPED, never remapped to a bare-ID twin (the twin
+// can be the paid variant — a silent-billing risk). Live ':free'-suffixed ids
+// we do not curate are added as extras.
+export async function fetchLiveXKiro(fetchImpl = (typeof fetch === 'function' ? fetch.bind(globalThis) : null)) {
+  const key = state.keys.xkiro;
+  if (!fetchImpl || !key) return;
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 7000);
+    const r = await fetchImpl('https://api.xkiro.com/v1/models', {
+      signal: ctl.signal,
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    clearTimeout(t);
+    const j = await r.json();
+    const live = Array.isArray(j?.data) ? j.data.map((m) => m?.id).filter(Boolean) : [];
+    if (!live.length) return;
+    const liveIds = new Set(live);
+    const curated = getProvider('xkiro')?.models || [];
+    const kept = curated.filter((m) => liveIds.has(m.id));
+    const keptIds = new Set(kept.map((m) => m.id));
+    const extras = live
+      .filter((id) => id.endsWith(':free') && !keptIds.has(id) && !/embed|whisper|tts|audio|guard|moderator/i.test(id))
+      .slice(0, 12)
+      .map((id) => ({
+        id,
+        label: id.split('/').pop().replace(/:free$/, '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 40),
+        tags: ['FREE', 'LIVE'],
+      }));
+    setState({ liveModels: { ...state.liveModels, xkiro: [...kept, ...extras] } });
+    if (!kept.length && !extras.length) {
+      actions.toast('⚠ xKiro: no curated models are callable on your key — check your plan at xkiro.com', 'error');
+    } else if (kept.length < curated.length) {
+      actions.toast(`⚡ xKiro lane synced: ${kept.length}/${curated.length} curated models callable on your key${extras.length ? ' · +' + extras.length + ' live free models' : ''}`);
+    }
+  } catch {}
+}
+
 // If the live catalog renamed models, remap saved picks to valid ones
 function remapPollinations(models) {
   const ids = new Set(models.map((m) => m.id));
@@ -721,11 +763,14 @@ function applyAutoBest(reason = 'keys changed') {
 // dead — network hiccups leave it alone.
 export async function pingFreeLanes(complete = _complete) {
   const { PROVIDERS: ALL } = await import('@shared/providers.js');
+  // sync the xKiro live catalog first so the ping targets a model the key can
+  // actually call (a stale id would 404 and falsely mark the lane dead)
+  if (state.keys.xkiro) await fetchLiveXKiro();
   const jobs = ALL.filter((p) => p.zeroCredit && p.needsKey && hasCredential(p.id, state)).map(async (p) => {
     try {
       await complete({
         provider: p.id,
-        model: p.models[0].id,
+        model: state.liveModels[p.id]?.[0]?.id || p.models[0].id,
         messages: [{ role: 'user', content: 'hi' }],
         apiKey: state.keys[p.id],
         maxTokens: 5,
@@ -763,6 +808,7 @@ export const actions = {
   setKeys: (patch) => {
     setState((s) => ({ keys: { ...s.keys, ...patch } }), { persist: true });
     if (Object.values(patch || {}).some(Boolean)) applyAutoBest('new key');
+    if (patch && patch.xkiro) fetchLiveXKiro().catch(() => {});
   },
   removeKey: (providerId) => {
     setState((s) => {

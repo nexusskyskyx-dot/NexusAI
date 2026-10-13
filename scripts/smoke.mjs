@@ -1322,8 +1322,9 @@ function modelLabelSafeguard(p, m) {
   if (xk30.baseUrl !== 'https://api.xkiro.com/v1/chat/completions') throw new Error('xkiro url wrong');
   if (xk30.models.length < 12) throw new Error('xkiro catalog too small');
 
-  // every listed model is one of the VERIFIED $0 IDs from xkiro.com/models —
-  // paid models (deepseek/minimax/gpt/claude on xKiro) must never appear
+  // every listed model is VERIFIED against xkiro.com/models — either a
+  // verified-$0 free model (FREE tag) or a verified paid balance model
+  // (PAID tag). Unknown models must never appear.
   const verifiedFree30 = new Set([
     'mistralai/mistral-large-4-0', 'mistralai/mistral-medium-3.5', 'mistralai/mistral-small-2603',
     'mistralai/codestral-2508', 'mistralai/devstral-medium', 'mistralai/ministral-14b', 'mistralai/ministral-8b', 'mistralai/ministral-3b',
@@ -1335,10 +1336,17 @@ function modelLabelSafeguard(p, m) {
     'stealth/big-pickle', 'stealth/space-bunny-alpha:free', 'sensenova/sensenova-6.8-flash-lite',
     'apodex/apodex-1.1-mini:free', 'dots-studio/dots-3-note-preview:free', 'inclusionai/ling-3.0-flash-sante:free', 'liquid/lfm-2.5-2.6b:free',
   ]);
+  const verifiedPaid30 = new Set([
+    'deepseek/deepseek-v4-pro-0813', 'deepseek/deepseek-v4-flash-0731', 'openai/gpt-5.6-luna',
+    'moonshotai/kimi-k2.8-preview-agent', 'z-ai/glm-5.3-flash', 'minimax/minimax-m2.7', 'x-ai/grok-4.5',
+  ]);
   for (const m of xk30.models) {
-    if (!verifiedFree30.has(m.id)) throw new Error('unverified/paid model listed: ' + m.id);
-    if (!m.tags.includes('FREE')) throw new Error('xkiro model missing FREE tag: ' + m.id);
+    const isFree = verifiedFree30.has(m.id), isPaid = verifiedPaid30.has(m.id);
+    if (!isFree && !isPaid) throw new Error('unverified model listed: ' + m.id);
+    if (isFree !== m.tags.includes('FREE')) throw new Error('FREE tag mismatch: ' + m.id);
+    if (isPaid && !m.tags.includes('PAID')) throw new Error('paid model missing PAID tag: ' + m.id);
   }
+  if (xk30.models[0].id !== 'mistralai/mistral-large-4-0') throw new Error('first xkiro model must stay free — it is the lane-ping target');
   const ids30 = xk30.models.map((m) => m.id);
   if (new Set(ids30).size !== ids30.length) throw new Error('duplicate xkiro ids');
 
@@ -1361,7 +1369,52 @@ function modelLabelSafeguard(p, m) {
   if (!/0-credit lane/.test(html30)) throw new Error('xkiro zero-credit badge missing');
   if (!/Mistral Large 4/.test(html30)) throw new Error('mistral large 4 missing from card');
   A11.removeKey('xkiro');
-  console.log(`[30] xKiro — ${xk30.models.length} verified-free models ✓ · no paid models leaked ✓ · auto-best promotions ✓ · env detection ✓ · card renders ✓`);
+  console.log(`[30] xKiro — ${xk30.models.length} verified models (14 free + 7 paid-balance) ✓ · FREE/PAID tag discipline ✓ · auto-best promotions (free only) ✓ · env detection ✓ · card renders ✓`);
+}
+
+// 31 · xKiro live-catalog sync — a model the key cannot call never appears
+{
+  const { fetchLiveXKiro: sync31 } = await import('../src/store.js');
+  const { pingFreeLanes: ping31 } = await import('../src/store.js');
+
+  A11.setKeys({ xkiro: 'xk_live_test_0123456789abcd' });
+  const fakeFetch31 = async (url, opts) => {
+    if (!/api\.xkiro\.com\/v1\/models/.test(url)) throw new Error('unexpected url: ' + url);
+    if (opts?.headers?.Authorization !== 'Bearer xk_live_test_0123456789abcd') throw new Error('auth header missing/wrong');
+    return { json: async () => ({ data: [
+      { id: 'mistralai/mistral-large-4-0' },
+      { id: 'cohere/command-a-plus' },
+      { id: 'deepseek/deepseek-v4-pro-0813' },
+      { id: 'qwen/qwen3.8-max' },          // bare PAID twin of a :free curated model
+      { id: 'qwen/qwen-new-free:free' },   // live free model we never curated
+      { id: 'some/embedding-thing:free' }, // must be filtered out of extras
+    ] }) };
+  };
+  await sync31(fakeFetch31);
+
+  let live31 = null;
+  renderToString(React11.createElement(() => { live31 = useStore11().liveModels.xkiro; return ''; }));
+  const ids31 = (live31 || []).map((m) => m.id);
+  if (!ids31.includes('mistralai/mistral-large-4-0')) throw new Error('callable curated model dropped');
+  if (!ids31.includes('deepseek/deepseek-v4-pro-0813')) throw new Error('callable PAID model dropped');
+  if (!ids31.includes('qwen/qwen-new-free:free')) throw new Error('live :free extra not added');
+  if (ids31.includes('qwen/qwen3.8-max:free')) throw new Error('non-callable curated model kept — would 404 in chat');
+  if (ids31.includes('qwen/qwen3.8-max')) throw new Error('FREE entry silently remapped to its PAID bare twin — billing risk');
+  if (ids31.includes('some/embedding-thing:free')) throw new Error('embedding model leaked into extras');
+  const extra31 = live31.find((m) => m.id === 'qwen/qwen-new-free:free');
+  if (!extra31.tags.includes('FREE')) throw new Error('live extra missing FREE tag');
+
+  // lane ping must target the LIVE first model, not the static catalog
+  let pinged31 = null;
+  await ping31(async (o) => { pinged31 = o.model; return 'ok'; });
+  if (pinged31 !== 'mistralai/mistral-large-4-0') throw new Error('ping target wrong: ' + pinged31);
+
+  // a failing catalog fetch must be a silent no-op (static catalog survives)
+  await sync31(async () => { throw new Error('network down'); });
+  renderToString(React11.createElement(() => { live31 = useStore11().liveModels.xkiro; return ''; }));
+  if (!live31 || !live31.length) throw new Error('failed sync wiped the catalog');
+  A11.removeKey('xkiro');
+  console.log('[31] xKiro live sync — callable-only catalog ✓ · no silent remap to paid twins ✓ · ping uses live model ✓ · network-fail safe ✓');
 }
 
 console.log('\nALL SMOKE TESTS PASSED ⬡');
