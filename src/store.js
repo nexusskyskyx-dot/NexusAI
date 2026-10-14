@@ -1,0 +1,868 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// NexusAI · App store (hand-rolled observable + useSyncExternalStore)
+// ─────────────────────────────────────────────────────────────────────────────
+import { useSyncExternalStore } from 'react';
+import { storage, uid } from '@lib/storage.js';
+import { streamChat, friendlyError, forcedStreamChat } from '@lib/ai.js';
+import { IMAGE_ASPECTS } from '@lib/images.js';
+import { runImagePipeline } from '@lib/imagepipe.js';
+import { autoConfigure } from '@lib/autobest.js';
+import { completeChat as _complete } from '@lib/ai.js';
+import { detectIntent } from '@lib/intent.js';
+import { runTeam, SYSTEMS } from '@lib/engine.js';
+import { searchWeb, researchQuery } from '@lib/websearch.js';
+import { runProject, upgradeProject as runUpgrade } from '@lib/projects.js';
+import { modelLabel, getProvider, getModel, PROVIDERS } from '@shared/providers.js';
+
+// ── state ────────────────────────────────────────────────────────────────────
+let state = {
+  booted: false,
+  serverOk: null, // null = checking
+  envKeys: [], // provider ids with server-side env keys
+  laneHealth: {}, // zero-credit provider id → 'ok' | 'dead' (free tier died)
+  keys: storage.loadKeys(),
+  settings: storage.loadSettings(),
+  solo: storage.loadSolo(),
+  image: storage.loadImage(),
+  prj: storage.loadPrj(),
+  projects: storage.loadProjects(),
+  activeProjectId: null,
+  projectBusy: false,
+  squad: storage.loadSquad(),
+  conversations: storage.loadConvs(),
+  activeId: null,
+  view: 'chat',
+  agentsOpen: false,
+  sidebarOpen: false,
+  studio: null, // { img, msgId } → image viewer/editor modal
+  streaming: false,
+  streamMsg: null, // {convId, msgId}
+  toasts: [],
+  runs: storage.loadRuns(),
+  liveModels: {}, // providerId → [models] fetched live
+};
+
+const subs = new Set();
+function getState() {
+  return state;
+}
+function setState(patch, { persist = false } = {}) {
+  state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) };
+  subs.forEach((f) => f());
+  if (persist) schedulePersist();
+}
+function subscribe(f) {
+  subs.add(f);
+  return () => subs.delete(f);
+}
+export function useStore() {
+  return useSyncExternalStore(subscribe, getState, getState);
+}
+
+// ── persistence (debounced) ──────────────────────────────────────────────────
+let persistTimer = null;
+function schedulePersist() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    storage.saveKeys(state.keys);
+    storage.saveSettings(state.settings);
+    storage.saveSolo(state.solo);
+    storage.saveImage(state.image);
+    storage.savePrj(state.prj);
+    storage.saveProjects(state.projects);
+    storage.saveSquad(state.squad);
+    storage.saveConvs(state.conversations.map((c) => ({ ...c, messages: c.messages.map((m) => ({ ...m, streaming: false })) })));
+    storage.saveRuns(state.runs);
+  }, 900);
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+function activeConv(s = state) {
+  return s.conversations.find((c) => c.id === s.activeId) || null;
+}
+function updateMessage(convId, msgId, patch) {
+  setState((s) => ({
+    conversations: s.conversations.map((c) =>
+      c.id !== convId
+        ? c
+        : { ...c, messages: c.messages.map((m) => (m.id === msgId ? { ...m, ...patch } : m)) }
+    ),
+  }));
+}
+
+// throttled stream buffer
+let streamBuf = null;
+function queueStreamPatch(convId, msgId, patch) {
+  if (!streamBuf || streamBuf.convId !== convId || streamBuf.msgId !== msgId) {
+    if (streamBuf) flushStreamBuf();
+    streamBuf = { convId, msgId, patch: {}, timer: null };
+  }
+  Object.assign(streamBuf.patch, patch);
+  if (!streamBuf.timer) streamBuf.timer = setTimeout(flushStreamBuf, 48);
+}
+function flushStreamBuf() {
+  if (!streamBuf) return;
+  const { convId, msgId, patch } = streamBuf;
+  clearTimeout(streamBuf.timer);
+  streamBuf = null;
+  updateMessage(convId, msgId, patch);
+}
+
+function toast(msg, type = 'info') {
+  const id = uid();
+  setState({ toasts: [...state.toasts, { id, msg, type }] });
+  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 4200);
+}
+
+// ── availability ─────────────────────────────────────────────────────────────
+export function availableProviders(s = state) {
+  return PROVIDERS.filter((p) => !p.needsKey || hasCredential(p.id, s));
+}
+// a provider is usable if the browser holds a key OR the server has one via env
+export function hasCredential(pid, s = state) {
+  return !!(s.keys && s.keys[pid]) || (s.envKeys || []).includes(pid);
+}
+export function providerStatus(p, s = state) {
+  if (!p.needsKey) return 'ready';
+  return hasCredential(p.id, s) ? 'ready' : 'nokey';
+}
+
+const SQUAD_PREFS = [
+  { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+  { provider: 'openai', model: 'gpt-4o' },
+  { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+  { provider: 'gemini', model: 'gemini-2.5-flash' },
+  { provider: 'openrouter', model: 'deepseek/deepseek-chat-v3-0324:free' },
+  { provider: 'deepseek', model: 'deepseek-chat' },
+  { provider: 'qwen', model: 'qwen3-max' },
+  { provider: 'github', model: 'openai/gpt-4o-mini' },
+  { provider: 'mistral', model: 'mistral-small-latest' },
+  { provider: 'cerebras', model: 'llama-3.3-70b' },
+  { provider: 'openrouter', model: 'qwen/qwen3-coder:free' },
+  { provider: 'openrouter', model: 'openai/gpt-oss-120b:free' },
+  { provider: 'pollinations', model: 'openai' },
+  { provider: 'pollinations', model: 'qwen-coder' },
+  { provider: 'pollinations', model: 'mistral' },
+  { provider: 'demo', model: 'nexus-demo' },
+];
+// Ordered fallback pool: every model the user can actually run right now
+// (has a key or needs none). Used for automatic agent failover.
+export function buildPool(s = state) {
+  const pool = [];
+  const seen = new Set();
+  const add = (provider, model) => {
+    const k = provider + '/' + model;
+    const p = getProvider(provider);
+    // v1.22.3: keyless providers (Pollinations, Demo) are ALWAYS runnable —
+    // hasCredential() is false for them (no key exists), which silently
+    // emptied the failover pool and let chats die with "HTTP 404"
+    if (seen.has(k) || !getModel(provider, model) || (p?.needsKey && !hasCredential(provider, s))) return;
+    seen.add(k);
+    pool.push({ provider, model });
+  };
+  for (const p of SQUAD_PREFS) add(p.provider, p.model);
+  for (const m of s.liveModels.pollinations || []) add('pollinations', m.id);
+  add('pollinations', 'openai');
+  add('pollinations', 'qwen-coder');
+  add('pollinations', 'mistral');
+  add('demo', 'nexus-demo');
+  return pool;
+}
+export function recommendedSquad(s = state) {
+  const picks = [];
+  for (const pref of SQUAD_PREFS) {
+    if (picks.length >= 3) break;
+    if (!hasCredential(pref.provider, s)) continue;
+    if (picks.some((p) => p.provider === pref.provider && p.model === pref.model)) continue;
+    picks.push(pref);
+  }
+  if (!picks.length) picks.push({ provider: 'pollinations', model: 'openai' });
+  const second = picks[1] || picks[0];
+  return {
+    workers: [picks[0], second],
+    planner: picks[2] || second,
+    critic: picks[2] || second,
+    synth: picks[0],
+  };
+}
+
+// ── server health + live catalogs ────────────────────────────────────────────
+async function pingServer() {
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store' });
+    const j = await r.json();
+    const envNow = Array.isArray(j.envKeys) ? j.envKeys : [];
+    const envWas = state.envKeys || [];
+    setState({ serverOk: !!j.ok, envKeys: envNow });
+    if (!state.envApplied && envNow.some((k) => !envWas.includes(k))) {
+      setState({ envApplied: true });
+      applyAutoBest('server keys');
+    }
+  } catch {
+    setState({ serverOk: false });
+  }
+}
+
+async function fetchLiveModels() {
+  // Pollinations publishes a live, keyless model catalog
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 6000);
+    const r = await fetch('https://text.pollinations.ai/models', { signal: ctl.signal });
+    clearTimeout(t);
+    const list = await r.json();
+    if (Array.isArray(list)) {
+      const models = list
+        .filter((m) => m && m.name && !(m.output || []).includes('image') && !/whisper|tts|audio/i.test(String(m.name)))
+        .slice(0, 14)
+        .map((m) => ({
+          id: m.name,
+          label: m.description ? String(m.description).slice(0, 42) : m.name,
+          tags: ['FREE', 'LIVE'],
+        }));
+      if (models.length) {
+        setState({ liveModels: { ...state.liveModels, pollinations: models } });
+        remapPollinations(models);
+      }
+    }
+  } catch {}
+}
+
+// OpenRouter publishes a keyless, CORS-open catalog of every model it serves.
+// Merge the freshest FREE models behind our curated top list so the free tier
+// stays current even after OpenRouter rotates models.
+export async function fetchLiveOpenRouter() {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 7000);
+    const r = await fetch('https://openrouter.ai/api/v1/models', { signal: ctl.signal });
+    clearTimeout(t);
+    if (!r.ok) return; // endpoint moved or key rejected — keep the static catalog
+    const j = await r.json();
+    const list = Array.isArray(j?.data) ? j.data : [];
+    if (!list.length) return;
+    const curated = getProvider('openrouter')?.models || [];
+    const curatedIds = new Set(curated.map((m) => m.id));
+    const isFree = (m) => Number(m?.pricing?.prompt ?? 1) === 0 && Number(m?.pricing?.completion ?? 1) === 0;
+    const extras = list
+      .filter((m) => m?.id && !curatedIds.has(m.id) && isFree(m) && !/embed|whisper|tts|audio|guard|moderator|vision-only/i.test(m.id))
+      .map((m) => ({
+        id: m.id,
+        label: String(m.name || m.id).replace(/\s*\(free\)\s*$/i, '').slice(0, 40),
+        tags: ['FREE', 'LIVE'],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .slice(0, 24);
+    if (extras.length) setState({ liveModels: { ...state.liveModels, openrouter: [...curated, ...extras] } });
+  } catch {}
+}
+
+// xKiro (v1.22.2): the catalog moves fast and free-model availability can
+// differ per account/plan — a model the key cannot call must vanish from the
+// picker BEFORE a user ever hits "Model is not available". Pull the key's LIVE
+// model list and reconcile. Conservative by design: a curated model missing
+// from the live list is DROPPED, never remapped to a bare-ID twin (the twin
+// can be the paid variant — a silent-billing risk). Live ':free'-suffixed ids
+// we do not curate are added as extras.
+export async function fetchLiveXKiro(fetchImpl = (typeof fetch === 'function' ? fetch.bind(globalThis) : null)) {
+  const key = state.keys.xkiro;
+  if (!fetchImpl || !key) return;
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 7000);
+    const r = await fetchImpl('https://api.xkiro.com/v1/models', {
+      signal: ctl.signal,
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    clearTimeout(t);
+    if (!r.ok) return; // endpoint moved or key rejected — keep the static catalog
+    const j = await r.json();
+    const live = Array.isArray(j?.data) ? j.data.map((m) => m?.id).filter(Boolean) : [];
+    if (!live.length) return;
+    const liveIds = new Set(live);
+    const curated = getProvider('xkiro')?.models || [];
+    const kept = curated.filter((m) => liveIds.has(m.id));
+    const keptIds = new Set(kept.map((m) => m.id));
+    const extras = live
+      .filter((id) => id.endsWith(':free') && !keptIds.has(id) && !/embed|whisper|tts|audio|guard|moderator/i.test(id))
+      .slice(0, 12)
+      .map((id) => ({
+        id,
+        label: id.split('/').pop().replace(/:free$/, '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 40),
+        tags: ['FREE', 'LIVE'],
+      }));
+    setState({ liveModels: { ...state.liveModels, xkiro: [...kept, ...extras] } });
+    if (!kept.length && !extras.length) {
+      actions.toast('⚠ xKiro: no curated models are callable on your key — check your plan at xkiro.com', 'error');
+    } else if (kept.length < curated.length) {
+      actions.toast(`⚡ xKiro lane synced: ${kept.length}/${curated.length} curated models callable on your key${extras.length ? ' · +' + extras.length + ' live free models' : ''}`);
+    }
+  } catch {}
+}
+
+// If the live catalog renamed models, remap saved picks to valid ones
+function remapPollinations(models) {
+  const ids = new Set(models.map((m) => m.id));
+  const fix = (slot) =>
+    slot && slot.provider === 'pollinations' && !ids.has(slot.model) ? { ...slot, model: models[0].id } : slot;
+  setState((s) => {
+    const solo = fix(s.solo);
+    const squad = {
+      ...s.squad,
+      workers: (s.squad.workers || []).map(fix),
+      planner: fix(s.squad.planner),
+      critic: fix(s.squad.critic),
+      synth: fix(s.squad.synth),
+    };
+    return { solo, squad };
+  }, { persist: true });
+}
+
+// ── conversations ────────────────────────────────────────────────────────────
+function newConversation() {
+  const conv = { id: uid(), title: 'New chat', ts: Date.now(), messages: [] };
+  setState((s) => ({ conversations: [conv, ...s.conversations], activeId: conv.id, view: 'chat' }), { persist: true });
+  return conv;
+}
+function ensureConversation() {
+  return activeConv() || newConversation();
+}
+function selectConversation(id) {
+  setState({ activeId: id, view: 'chat' });
+}
+function renameConversation(id, title) {
+  const t = String(title || '').trim().slice(0, 80);
+  if (!t) return;
+  setState((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, title: t } : c)) }), { persist: true });
+}
+function deleteConversation(id) {
+  setState((s) => {
+    const conversations = s.conversations.filter((c) => c.id !== id);
+    return { conversations, activeId: s.activeId === id ? conversations[0]?.id || null : s.activeId };
+  }, { persist: true });
+}
+function clearAll() {
+  setState({ conversations: [], activeId: null });
+}
+
+// ── generation ───────────────────────────────────────────────────────────────
+let abortCtl = null;
+
+async function generate(convId, history) {
+  const conv = state.conversations.find((c) => c.id === convId);
+  if (!conv) return;
+  const { settings, keys, solo, squad } = state;
+
+  // 🧭 v1.18 Auto-Intent — the message says where it wants to go
+  const auto = settings.autoIntent !== false;
+  const intent = auto ? detectIntent(history[history.length - 1]?.content || '') : { mode: null };
+  if (auto && intent.mode === 'project' && !state.projectBusy) {
+    // route to the project team — no chat message, straight to the builders
+    actions.setView('projects');
+    startProject(history[history.length - 1].content);
+    actions.toast('🛠 Routed to Projects — the team is on it');
+    return;
+  }
+  const mode = auto
+    ? intent.mode === 'image'
+      ? 'image'
+      : intent.mode === 'search' || intent.smalltalk
+      ? 'solo'
+      : settings.mode || 'team'
+    : settings.mode || 'team';
+  const webOn = auto && intent.mode === 'search' ? true : settings.web !== false;
+
+  const msg = {
+    id: uid(),
+    role: 'assistant',
+    content: '',
+    reasoning: '',
+    mode,
+    kind: mode === 'image' ? 'image' : undefined,
+    model:
+      mode === 'solo'
+        ? modelLabel(solo.provider, solo.model)
+        : mode === 'image'
+        ? `${state.image.model} · ${state.image.provider === 'pollinations' ? 'Pollinations' : 'OpenAI'}`
+        : null,
+    agents: [],
+    stages: [],
+    images: [],
+    streaming: true,
+    ts: Date.now(),
+  };
+  setState((s) => ({
+    conversations: s.conversations.map((c) => (c.id === convId ? { ...c, messages: [...c.messages, msg] } : c)),
+    streaming: true,
+    streamMsg: { convId, msgId: msg.id },
+    agentsOpen: s.agentsOpen,
+  }));
+
+  abortCtl = new AbortController();
+  const signal = abortCtl.signal;
+  const t0 = performance.now();
+
+  const finish = (patch) => {
+    flushStreamBuf();
+    updateMessage(convId, msg.id, { streaming: false, ms: Math.round(performance.now() - t0), ...patch });
+    setState({ streaming: false, streamMsg: null });
+    schedulePersist();
+  };
+
+  try {
+    if (mode === 'image') {
+      // 🎨 v1.16 Image Team — Websearcher → Enhancer → Image Tools → Upscaler → Previewer
+      const cfg = state.image || {};
+      const aspect = IMAGE_ASPECTS.find((x) => x.id === cfg.aspect) || IMAGE_ASPECTS[0];
+      const count = Math.max(1, Math.min(4, cfg.count || 1));
+      const prompt = history[history.length - 1]?.content || '';
+      const istages = [];
+      // image memory: earlier images in this conversation (prompt + enhanced)
+      const memory = [];
+      let lastUser = '';
+      for (const m of history.slice(0, -1)) {
+        if (m.role === 'user' && m.content) lastUser = m.content;
+        else if (m.kind === 'image') memory.push({ prompt: lastUser, enhanced: m.enhancedPrompt || '' });
+      }
+      const out = await runImagePipeline({
+        prompt,
+        provider: cfg.provider || 'pollinations',
+        model: cfg.model || 'flux',
+        aspect: aspect.id,
+        aspectW: aspect.w,
+        aspectH: aspect.h,
+        count,
+        apiKey: keys[cfg.provider === 'openai-images' ? 'openai' : cfg.provider],
+        signal,
+        web: webOn,
+        memory,
+        fallbacks: [
+          { provider: 'nexus-engine', model: 'black-forest-labs/flux.1-schnell' },
+          { provider: 'pollinations', model: 'flux' },
+          { provider: 'pollinations', model: 'turbo' },
+        ],
+        onStage: (stage, status, detail) => {
+          istages.push({ stage, status, detail });
+          queueStreamPatch(convId, msg.id, { istages: [...istages] });
+        },
+      });
+      const fb = out.images.find((im) => im.fellBack && im.requestedModel && im.requestedModel !== im.model);
+      if (fb) actions.toast(`⚡ ${fb.requestedModel.split('/').pop()} unavailable — drew with ${String(fb.model).split('/').pop()}`);
+      if (!out.images.length && out.warns.length) {
+        finish({ images: [], istages, enhancedPrompt: out.enhancedPrompt, error: `Image Team failed: ${out.warns[0]}` });
+      } else {
+        finish({
+          images: out.images,
+          istages,
+          enhancedPrompt: out.enhancedPrompt,
+          error: out.warns.length ? `Note: ${out.warns.join(' · ')}` : undefined,
+        });
+      }
+    } else if (mode === 'solo') {
+      let text = '';
+      let reasoning = '';
+      // 🌐 Researcher — web knowledge before the model answers
+      let soloSystem = SYSTEMS.solo;
+      if (webOn) {
+        try {
+          const web = await searchWeb(researchQuery(history[history.length - 1]?.content || '', 'chat'), { signal, deep: true });
+          if (web.ok) {
+            soloSystem += `\n\n${web.knowledge}`;
+            queueStreamPatch(convId, msg.id, { sources: web.sources.map((s) => ({ source: s.source, title: s.title, url: s.url })) });
+          }
+        } catch (e) {
+          if (e?.name === 'AbortError') throw e;
+        }
+      }
+      // ⚡ FORCED CALL (v1.17): the primary model, then the entire failover
+      // pool — the answer always arrives from somewhere.
+      const candidates = [
+        { provider: solo.provider, model: solo.model },
+        ...buildPool().filter((c) => !(c.provider === solo.provider && c.model === solo.model)),
+      ];
+      const r = await forcedStreamChat(
+        candidates,
+        {
+          messages: history,
+          system: soloSystem,
+          temperature: settings.temperature,
+          maxTokens: settings.maxTokens,
+          apiKey: keys[solo.provider],
+          signal,
+          transport: settings.transport,
+          onDelta: (d) => {
+            text += d;
+            queueStreamPatch(convId, msg.id, { content: text });
+          },
+          onReasoning: (d) => {
+            reasoning += d;
+            queueStreamPatch(convId, msg.id, { reasoning });
+          },
+        },
+        (o) => streamChat({ ...o, apiKey: keys[o.provider] || keys[solo.provider] || '' })
+      );
+      if (r.fallbackFrom) {
+        actions.toast(`⚡ ${r.fallbackFrom} failed — answered by ${modelLabel(r.provider, r.model)}`);
+      }
+      finish({ content: r.text || text, reasoning: r.reasoning || reasoning, model: modelLabel(r.provider, r.model) });
+    } else {
+      // local accumulators — never read streamed content back from state (it
+      // lags behind the 60ms flush buffer and would drop text)
+      let finalAcc = '';
+      let finalReasonAcc = '';
+      const agentMap = new Map();
+      const stages = [];
+      const result = await runTeam({
+        messages: history,
+        cfg: { ...squad, settings, keys, pool: buildPool() },
+        signal,
+        cb: {
+          onStage: (st) => {
+            stages.push(st);
+            queueStreamPatch(convId, msg.id, { stages: [...stages] });
+          },
+          onAgent: (a) => {
+            agentMap.set(a.id, a);
+            queueStreamPatch(convId, msg.id, { agents: [...agentMap.values()] });
+          },
+          onFinalDelta: (d) => {
+            finalAcc += d;
+            queueStreamPatch(convId, msg.id, { content: finalAcc });
+          },
+          onFinalReasoning: (d) => {
+            finalReasonAcc += d;
+            queueStreamPatch(convId, msg.id, { reasoning: finalReasonAcc });
+          },
+        },
+      });
+      finish({
+        content: result.finalText,
+        reasoning: result.finalReasoning,
+        stats: result.stats,
+        verdict: result.verdict,
+        sources: result.webSources?.length ? result.webSources.map((s) => ({ source: s.source, title: s.title, url: s.url })) : undefined,
+      });
+      setState((s) => ({
+        runs: [
+          {
+            ts: Date.now(),
+            prompt: (history[history.length - 1]?.content || '').slice(0, 120),
+            models: result.stats.models,
+            drafters: result.stats.drafters,
+            ms: result.stats.totalMs,
+            excerpt: result.finalText.slice(0, 180),
+          },
+          ...s.runs,
+        ].slice(0, 20),
+      }));
+      schedulePersist();
+    }
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      finish({ aborted: true });
+      return;
+    }
+    toast(friendlyError(e), 'error');
+    finish({ error: friendlyError(e) });
+  }
+}
+
+function sendMessage(text) {
+  const content = String(text || '').trim();
+  if (!content || state.streaming) return;
+  const conv = ensureConversation();
+  const userMsg = { id: uid(), role: 'user', content, ts: Date.now() };
+  setState((s) => ({
+    conversations: s.conversations.map((c) =>
+      c.id === conv.id
+        ? {
+            ...c,
+            title: c.messages.length === 0 ? content.replace(/\s+/g, ' ').slice(0, 48) : c.title,
+            messages: [...c.messages, userMsg],
+          }
+        : c
+    ),
+  }), { persist: true });
+  const history = [...(activeConv()?.messages || [])].map((m) => ({ role: m.role, content: m.content }));
+  generate(conv.id, history);
+}
+
+function regenerate(msgId) {
+  if (state.streaming) return;
+  const conv = activeConv();
+  if (!conv) return;
+  const idx = conv.messages.findIndex((m) => m.id === msgId);
+  if (idx < 0) return;
+  const history = conv.messages.slice(0, idx).map((m) => ({ role: m.role, content: m.content }));
+  setState((s) => ({
+    conversations: s.conversations.map((c) => (c.id === conv.id ? { ...c, messages: c.messages.slice(0, idx) } : c)),
+  }), { persist: true });
+  generate(conv.id, history);
+}
+
+function editUserMessage(msgId, newText) {
+  if (state.streaming) return;
+  const conv = activeConv();
+  if (!conv) return;
+  const idx = conv.messages.findIndex((m) => m.id === msgId);
+  if (idx < 0) return;
+  const content = String(newText || '').trim();
+  if (!content) return;
+  setState((s) => ({
+    conversations: s.conversations.map((c) =>
+      c.id === conv.id
+        ? { ...c, messages: c.messages.slice(0, idx).concat([{ ...c.messages[idx], content, edited: true }]) }
+        : c
+    ),
+  }), { persist: true });
+  const history = [...(activeConv()?.messages || [])].map((m) => ({ role: m.role, content: m.content }));
+  generate(conv.id, history);
+}
+
+function deleteMessage(msgId) {
+  const conv = activeConv();
+  if (!conv) return;
+  setState((s) => ({
+    conversations: s.conversations.map((c) => (c.id === conv.id ? { ...c, messages: c.messages.filter((m) => m.id !== msgId) } : c)),
+  }), { persist: true });
+}
+
+function stopGeneration() {
+  abortCtl?.abort();
+}
+
+// ── projects ─────────────────────────────────────────────────────────────────
+let projectCtl = null;
+let projBuf = null;
+
+function flushProjectBuf() {
+  if (!projBuf) return;
+  const { pid, fields } = projBuf;
+  clearTimeout(projBuf.timer);
+  projBuf = null;
+  setState((s) => ({ projects: s.projects.map((p) => (p.id === pid ? { ...p, ...fields } : p)) }));
+}
+function updateProject(pid, patch) {
+  setState((s) => ({ projects: s.projects.map((p) => (p.id === pid ? { ...p, ...patch } : p)) }));
+}
+
+async function startProject(idea) {
+  const text = String(idea || '').trim();
+  if (!text || state.projectBusy) return;
+  const pid = uid();
+  const proj = {
+    id: pid,
+    idea: text,
+    title: 'New project',
+    description: '',
+    files: [],
+    agents: [],
+    stages: [],
+    status: 'planning',
+    createdAt: Date.now(),
+    testReport: null,
+    report: null,
+    model: modelLabel(state.prj.provider, state.prj.model),
+  };
+  setState(
+    (s) => ({ projects: [proj, ...s.projects].slice(0, 6), activeProjectId: pid, view: 'projects', projectBusy: true }),
+    { persist: true }
+  );
+
+  projectCtl = new AbortController();
+  const emit = (fields) => {
+    if (!projBuf || projBuf.pid !== pid) {
+      flushProjectBuf();
+      projBuf = { pid, fields: {}, timer: null };
+    }
+    Object.assign(projBuf.fields, fields);
+    if (!projBuf.timer) projBuf.timer = setTimeout(flushProjectBuf, 60);
+  };
+
+  try {
+    await runProject({
+      idea: text,
+      model: state.prj,
+      pool: buildPool(),
+      keys: state.keys,
+      settings: state.settings,
+      signal: projectCtl.signal,
+      cb: { onDoc: emit },
+      web: state.settings.web !== false,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') updateProject(pid, { status: 'stopped' });
+    else {
+      updateProject(pid, { status: 'error', error: friendlyError(e) });
+      toast(friendlyError(e), 'error');
+    }
+  } finally {
+    flushProjectBuf();
+    setState({ projectBusy: false });
+    schedulePersist();
+  }
+}
+
+async function startUpgrade(request) {
+  const text = String(request || '').trim();
+  const proj = state.projects.find((p) => p.id === state.activeProjectId);
+  if (!text || !proj || state.projectBusy) return;
+  setState({ projectBusy: true });
+
+  projectCtl = new AbortController();
+  const pid = proj.id;
+  const emit = (fields) => {
+    if (!projBuf || projBuf.pid !== pid) {
+      flushProjectBuf();
+      projBuf = { pid, fields: {}, timer: null };
+    }
+    Object.assign(projBuf.fields, fields);
+    if (!projBuf.timer) projBuf.timer = setTimeout(flushProjectBuf, 60);
+  };
+
+  try {
+    await runUpgrade({
+      project: proj,
+      request: text,
+      model: state.prj,
+      pool: buildPool(),
+      keys: state.keys,
+      settings: state.settings,
+      signal: projectCtl.signal,
+      cb: { onDoc: emit },
+      web: state.settings.web !== false,
+    });
+    toast(`Project upgraded to v${(state.projects.find((p) => p.id === pid)?.version) || 2} ✓`);
+  } catch (e) {
+    if (e?.name === 'AbortError') updateProject(pid, { status: 'stopped', upgradeNote: null });
+    else {
+      updateProject(pid, { status: 'error', error: friendlyError(e), upgradeNote: null });
+      toast(friendlyError(e), 'error');
+    }
+  } finally {
+    flushProjectBuf();
+    setState({ projectBusy: false });
+    schedulePersist();
+  }
+}
+
+// ── boot ─────────────────────────────────────────────────────────────────────
+function boot() {
+  if (state.booted) return;
+  setState({ booted: true, activeId: state.conversations[0]?.id || null });
+  pingServer();
+  setInterval(pingServer, 45000);
+  fetchLiveModels();
+  fetchLiveOpenRouter();
+  pingFreeLanes();
+  setInterval(() => pingFreeLanes(), 60 * 60 * 1000);
+}
+
+// ── Auto-Best (v1.17): keys changed → re-select the best models everywhere.
+// Only upgrades default/dead slots; deliberate working picks are never touched.
+function applyAutoBest(reason = 'keys changed') {
+  const cfg = autoConfigure(state);
+  if (!cfg.changes.length) return;
+  setState({ solo: cfg.solo, squad: cfg.squad, prj: cfg.prj, image: cfg.image });
+  schedulePersist();
+  actions.toast(`⚡ Auto-configured (${reason}): ${cfg.changes.slice(0, 3).join(' · ')}${cfg.changes.length > 3 ? ' +' + (cfg.changes.length - 3) : ''}`);
+}
+
+// ── Free-lane health (v1.22): a dead free tier must demote itself before a
+// user ever hits it. Pings each connected zero-credit provider with a 1-token
+// request; only explicit auth/quota failures (401/402/403/404) mark a lane
+// dead — network hiccups leave it alone.
+export async function pingFreeLanes(complete = _complete) {
+  const { PROVIDERS: ALL } = await import('@shared/providers.js');
+  // sync the xKiro live catalog first so the ping targets a model the key can
+  // actually call (a stale id would 404 and falsely mark the lane dead)
+  if (state.keys.xkiro) await fetchLiveXKiro();
+  const jobs = ALL.filter((p) => p.zeroCredit && p.needsKey && hasCredential(p.id, state)).map(async (p) => {
+    try {
+      await complete({
+        provider: p.id,
+        model: state.liveModels[p.id]?.[0]?.id || p.models[0].id,
+        messages: [{ role: 'user', content: 'hi' }],
+        apiKey: state.keys[p.id],
+        maxTokens: 5,
+        transport: state.settings.transport,
+      });
+      return [p.id, 'ok'];
+    } catch (e) {
+      const dead = [401, 402, 403, 404].includes(e?.status);
+      return [p.id, dead ? 'dead' : 'unknown'];
+    }
+  });
+  const results = await Promise.all(jobs);
+  const laneHealth = { ...state.laneHealth };
+  for (const [pid, verdict] of results) {
+    if (verdict !== 'unknown') laneHealth[pid] = verdict;
+    else delete laneHealth[pid];
+  }
+  setState({ laneHealth });
+  const deadNow = results.filter(([, v]) => v === 'dead').map(([pid]) => pid);
+  if (deadNow.length) actions.toast(`⚠ Free tier ended: ${deadNow.join(', ')} — Auto-Best remapped your models`);
+  return laneHealth;
+}
+
+// ── actions ──────────────────────────────────────────────────────────────────
+export const actions = {
+  boot,
+  setView: (view) => setState({ view }),
+  setAgentsOpen: (v) => setState({ agentsOpen: v }),
+  setSidebarOpen: (v) => setState({ sidebarOpen: v }),
+  setSettings: (patch) => setState((s) => ({ settings: { ...s.settings, ...patch } }), { persist: true }),
+  setAccent: (accent) => {
+    document.documentElement.dataset.acc = accent;
+    setState((s) => ({ settings: { ...s.settings, accent } }), { persist: true });
+  },
+  setKeys: (patch) => {
+    setState((s) => ({ keys: { ...s.keys, ...patch } }), { persist: true });
+    if (Object.values(patch || {}).some(Boolean)) applyAutoBest('new key');
+    if (patch && patch.xkiro) fetchLiveXKiro().catch(() => {});
+  },
+  removeKey: (providerId) => {
+    setState((s) => {
+      const keys = { ...s.keys };
+      delete keys[providerId];
+      return { keys };
+    }, { persist: true });
+    applyAutoBest('key removed');
+  },
+  setSolo: (patch) => setState((s) => ({ solo: { ...s.solo, ...patch } }), { persist: true }),
+  setImage: (patch) => setState((s) => ({ image: { ...s.image, ...patch } }), { persist: true }),
+  setPrjModel: (v) => setState((s) => ({ prj: { ...s.prj, ...v } }), { persist: true }),
+  openProjectWizard: () => setState({ view: 'projects', activeProjectId: null }),
+  selectProject: (id) => setState({ view: 'projects', activeProjectId: id }),
+  deleteProject: (id) =>
+    setState(
+      (s) => ({
+        projects: s.projects.filter((p) => p.id !== id),
+        activeProjectId: s.activeProjectId === id ? null : s.activeProjectId,
+      }),
+      { persist: true }
+    ),
+  startProject,
+  upgradeProject: startUpgrade,
+  stopProject: () => projectCtl?.abort(),
+  openStudio: (img, msgId = null) => setState({ studio: { img, msgId } }),
+  closeStudio: () => setState({ studio: null }),
+  setSquad: (patch) => setState((s) => ({ squad: { ...s.squad, ...patch } }), { persist: true }),
+  applyRecommendedSquad: () => setState({ squad: recommendedSquad() }, { persist: true }),
+  newConversation,
+  selectConversation,
+  deleteConversation,
+  renameConversation,
+  clearAll,
+  sendMessage,
+  regenerate,
+  editUserMessage,
+  deleteMessage,
+  stopGeneration,
+  toast,
+  pingServer,
+  getProvider,
+  activeConv,
+};
+
+export { activeConv };
